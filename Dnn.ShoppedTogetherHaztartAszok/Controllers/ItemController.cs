@@ -14,9 +14,12 @@ using DotNetNuke.Entities.Users;
 using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Web.Mvc.Framework.ActionFilters;
 using DotNetNuke.Web.Mvc.Framework.Controllers;
+using ShoppedTogetherHaztartasok.Dnn.Models;
+using ShoppedTogetherHaztartasok.Dnn.Services;
 using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Components;
 using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Web.Mvc;
 
@@ -25,6 +28,7 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
     [DnnHandleError]
     public class ItemController : DnnController
     {
+
 
         public ActionResult Delete(int itemId)
         {
@@ -80,8 +84,28 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
         [ModuleAction(ControlKey = "Edit", TitleKey = "AddItem")]
         public ActionResult Index()
         {
-            var items = ItemManager.Instance.GetItems(ModuleContext.ModuleId);
-            return View(items);
+            var runCalc = Request.QueryString["runCalc"];
+
+            if (runCalc == "1")
+            {
+                var service = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
+                service.InitializeAllPairs();
+                service.PopulatePairCountsFromOrders();
+
+                ViewBag.Message = "Számolás lefutott.";
+            }
+
+            var model = new List<Item>();
+            return View(model);
+        }
+
+        private IEnumerable<ShoppedTogetherProductPair> GetTopPairs(int productId)
+        {
+            var service = new ShoppedTogetherService();
+
+            return service.GetPairsForProduct(productId)
+                .OrderByDescending(p => p.TogetherCount)
+                .Take(5);
         }
     }
 }
