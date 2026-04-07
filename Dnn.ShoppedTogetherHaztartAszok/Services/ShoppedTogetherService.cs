@@ -191,7 +191,22 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                     .GroupBy(p => p.bvin)
                     .ToDictionary(g => g.Key, g => g.First().Id);
 
-                var placedOrders = orderRepo.Find("WHERE IsPlaced = 1").ToList();
+                var lastRun = ctx.GetRepository<ShoppedTogetherSyncRun>()
+                    .Find("WHERE WasSuccessful = 1 ORDER BY SyncRunId DESC")
+                    .FirstOrDefault();
+
+                List<SourceOrder> placedOrders;
+
+                if (lastRun != null && lastRun.LastProcessedOrderId.HasValue)
+                {
+                    placedOrders = orderRepo.Find(
+                        "WHERE IsPlaced = 1 AND Id > @0",
+                        lastRun.LastProcessedOrderId.Value).ToList();
+                }
+                else
+                {
+                    placedOrders = orderRepo.Find("WHERE IsPlaced = 1").ToList();
+                }
 
                 foreach (var order in placedOrders)
                 {
@@ -223,6 +238,21 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                             }
                         }
                     }
+                }
+
+                if (placedOrders.Any())
+                {
+                    var lastOrderId = placedOrders.Max(o => o.Id);
+
+                    ctx.GetRepository<ShoppedTogetherSyncRun>().Insert(
+                        new ShoppedTogetherSyncRun
+                        {
+                            StartedOnUtc = DateTime.UtcNow,
+                            FinishedOnUtc = DateTime.UtcNow,
+                            WasSuccessful = true,
+                            LastProcessedOrderId = (int)lastOrderId,
+                            ProcessedOrdersCount = placedOrders.Count
+                        });
                 }
             }
         }
