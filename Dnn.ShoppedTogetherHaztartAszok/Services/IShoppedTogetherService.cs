@@ -21,5 +21,8 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
 
         void RunIncrementalSync();
 
+        IEnumerable<int> GetTopRecommendedProductIds(IEnumerable<int> cartProductIds, int topN);
+
+
     }
 }

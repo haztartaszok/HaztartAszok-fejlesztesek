@@ -1,11 +1,12 @@
-﻿@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<IEnumerable< ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.Item >>
+﻿@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<IEnumerable<ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.Item>>
 
+@using System.Linq
 @using System.Text.RegularExpressions
 @using DotNetNuke.Web.Mvc.Helpers
 
 
 <div id="Items-@Dnn.ModuleContext.ModuleId">
-    @if (Model.Count() == 0)
+    @if (Model == null || !Model.GetEnumerator().MoveNext())
     {
         <p>@Dnn.LocalizeString("NoItems")</p>
     }
@@ -31,3 +32,16 @@
         </ul>
     }
 </div>
+
+@if (ViewBag.RecommendedIds != null)
+{
+    <div>
+        <h3>Ajánlott termék ID-k (teszt):</h3>
+        <ul>
+            @foreach (var id in (IEnumerable<int>)ViewBag.RecommendedIds)
+            {
+                <li>@id</li>
+            }
+        </ul>
+    </div>
+}

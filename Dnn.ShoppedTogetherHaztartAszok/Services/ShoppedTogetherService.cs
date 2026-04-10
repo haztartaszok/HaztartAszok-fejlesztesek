@@ -269,5 +269,53 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
             PopulatePairCountsFromOrders();
         }
 
+        public IEnumerable<int> GetTopRecommendedProductIds(IEnumerable<int> cartProductIds, int topN)
+        {
+            var cartIds = cartProductIds
+                .Distinct()
+                .ToList();
+
+            var scores = new Dictionary<int, int>();
+
+            using (var ctx = DataContext.Instance())
+            {
+                var pairRepo = ctx.GetRepository<ShoppedTogetherProductPair>();
+
+                foreach (var cartProductId in cartIds)
+                {
+                    var pairs = pairRepo.Find(
+                        "WHERE ProductAId = @0 OR ProductBId = @0",
+                        cartProductId).ToList();
+
+                    foreach (var pair in pairs)
+                    {
+                        int recommendedProductId =
+                            pair.ProductAId == cartProductId
+                                ? pair.ProductBId
+                                : pair.ProductAId;
+
+                        if (cartIds.Contains(recommendedProductId))
+                        {
+                            continue;
+                        }
+
+                        if (!scores.ContainsKey(recommendedProductId))
+                        {
+                            scores[recommendedProductId] = 0;
+                        }
+
+                        scores[recommendedProductId] += pair.TogetherCount;
+                    }
+                }
+            }
+
+            return scores
+                .OrderByDescending(x => x.Value)
+                .ThenBy(x => x.Key)
+                .Take(topN)
+                .Select(x => x.Key)
+                .ToList();
+        }
+
     }
 }

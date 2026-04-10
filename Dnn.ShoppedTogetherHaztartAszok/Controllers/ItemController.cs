@@ -112,6 +112,14 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
                 ViewBag.Message = "Sync lefutott.";
             }
 
+            var recommendationService = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
+
+            var recommendedIds = recommendationService.GetTopRecommendedProductIds(
+                new List<int> { 39, 31, 34 },
+                5);
+
+            ViewBag.RecommendedIds = recommendedIds;
+
             var model = new List<Item>();
             return View(model);
         }
