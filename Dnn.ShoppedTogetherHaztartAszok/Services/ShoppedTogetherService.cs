@@ -317,5 +317,62 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                 .ToList();
         }
 
+        public IEnumerable<int> GetTopSellingProductIds(int topN)
+        {
+            using (var ctx = DataContext.Instance())
+            {
+                var orderRepo = ctx.GetRepository<SourceOrder>();
+                var lineItemRepo = ctx.GetRepository<SourceLineItem>();
+                var productRepo = ctx.GetRepository<SourceProduct>();
+
+                var allProducts = productRepo.Get().ToList();
+
+                var productBvinToId = allProducts
+                    .Where(p => !string.IsNullOrEmpty(p.bvin))
+                    .GroupBy(p => p.bvin)
+                    .ToDictionary(g => g.Key, g => g.First().Id);
+
+                var placedOrderBvins = orderRepo.Find("WHERE IsPlaced = 1")
+                    .Select(o => o.bvin)
+                    .ToList();
+
+                var scores = new Dictionary<int, int>();
+
+                foreach (var orderBvin in placedOrderBvins)
+                {
+                    var items = lineItemRepo.Find("WHERE OrderBvin = @0", orderBvin).ToList();
+
+                    foreach (var item in items)
+                    {
+                        if (string.IsNullOrEmpty(item.ProductId))
+                        {
+                            continue;
+                        }
+
+                        if (!productBvinToId.ContainsKey(item.ProductId))
+                        {
+                            continue;
+                        }
+
+                        var productId = productBvinToId[item.ProductId];
+
+                        if (!scores.ContainsKey(productId))
+                        {
+                            scores[productId] = 0;
+                        }
+
+                        scores[productId] += item.Quantity;
+                    }
+                }
+
+                return scores
+                    .OrderByDescending(x => x.Value)
+                    .ThenBy(x => x.Key)
+                    .Take(topN)
+                    .Select(x => x.Key)
+                    .ToList();
+            }
+        }
+
     }
 }

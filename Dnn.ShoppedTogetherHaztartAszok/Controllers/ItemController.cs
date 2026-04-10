@@ -22,6 +22,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web.Mvc;
+using Hotcakes.Commerce;
+using Hotcakes.Commerce.Orders;
 
 namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Controllers
 {
@@ -112,11 +114,46 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
                 ViewBag.Message = "Sync lefutott.";
             }
 
+            var app = Hotcakes.Commerce.HotcakesApplication.Current;
+            var cart = app.OrderServices.CurrentShoppingCart();
+
+            var cartProductIds = new List<int>();
+
+            if (cart != null)
+            {
+                var productRepo = DotNetNuke.Data.DataContext.Instance().GetRepository<ShoppedTogetherHaztartasok.Dnn.Models.SourceProduct>();
+
+                var allProducts = productRepo.Get().ToList();
+
+                var productBvinToId = allProducts
+                    .Where(p => !string.IsNullOrEmpty(p.bvin))
+                    .GroupBy(p => p.bvin)
+                    .ToDictionary(g => g.Key, g => g.First().Id);
+
+                cartProductIds = cart.Items
+                    .Select(i => i.ProductId)
+                    .Where(productBvin => !string.IsNullOrEmpty(productBvin) && productBvinToId.ContainsKey(productBvin))
+                    .Select(productBvin => productBvinToId[productBvin])
+                    .Distinct()
+                    .ToList();
+            }
+
             var recommendationService = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
 
-            var recommendedIds = recommendationService.GetTopRecommendedProductIds(
-                new List<int> { 39, 31, 34 },
-                5);
+            List<int> recommendedIds;
+
+            if (cartProductIds.Any())
+            {
+                recommendedIds = recommendationService
+                    .GetTopRecommendedProductIds(cartProductIds, 5)
+                    .ToList();
+            }
+            else
+            {
+                recommendedIds = recommendationService
+                    .GetTopSellingProductIds(5)
+                    .ToList();
+            }
 
             ViewBag.RecommendedIds = recommendedIds;
 

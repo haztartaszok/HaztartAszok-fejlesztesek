@@ -23,6 +23,7 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
 
         IEnumerable<int> GetTopRecommendedProductIds(IEnumerable<int> cartProductIds, int topN);
 
+        IEnumerable<int> GetTopSellingProductIds(int topN);
 
     }
 }
