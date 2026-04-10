@@ -113,6 +113,7 @@
     <Compile Include="Controllers\SettingsController.cs" />
     <Compile Include="Models\Item.cs" />
     <Compile Include="Controllers\ItemController.cs" />
+    <Compile Include="Models\RecommendedProductViewModel.cs" />
     <Compile Include="Models\Settings.cs" />
     <Compile Include="Models\ShoppedTogetherProductPair.cs" />
     <Compile Include="Models\ShoppedTogetherSyncRun.cs" />

@@ -121,7 +121,8 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
 
             if (cart != null)
             {
-                var productRepo = DotNetNuke.Data.DataContext.Instance().GetRepository<ShoppedTogetherHaztartasok.Dnn.Models.SourceProduct>();
+                var productRepo = DotNetNuke.Data.DataContext.Instance()
+                    .GetRepository<ShoppedTogetherHaztartasok.Dnn.Models.SourceProduct>();
 
                 var allProducts = productRepo.Get().ToList();
 
@@ -155,7 +156,11 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
                     .ToList();
             }
 
-            ViewBag.RecommendedIds = recommendedIds;
+            var recommendedProducts = recommendationService
+                .GetRecommendedProductsByIds(recommendedIds)
+                .ToList();
+
+            ViewBag.RecommendedProducts = recommendedProducts;
 
             var model = new List<Item>();
             return View(model);

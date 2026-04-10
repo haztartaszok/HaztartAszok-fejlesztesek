@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using DotNetNuke.Data;
 using ShoppedTogetherHaztartasok.Dnn.Models;
+using Hotcakes.Commerce;
+using DotNetNuke.Entities.Portals;
 
 namespace ShoppedTogetherHaztartasok.Dnn.Services
 {
@@ -372,6 +374,94 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                     .Select(x => x.Key)
                     .ToList();
             }
+        }
+
+        public IEnumerable<RecommendedProductViewModel> GetRecommendedProductsByIds(IEnumerable<int> productIds)
+        {
+            var ids = productIds
+                .Distinct()
+                .ToList();
+
+            var result = new List<RecommendedProductViewModel>();
+
+            using (var ctx = DataContext.Instance())
+            {
+                var productRepo = ctx.GetRepository<SourceProduct>();
+
+                var sourceProducts = productRepo.Get()
+                    .Where(p => ids.Contains(p.Id))
+                    .ToList();
+
+                var sourceProductsById = sourceProducts.ToDictionary(p => p.Id, p => p);
+
+                var app = HotcakesApplication.Current;
+
+                foreach (var id in ids)
+                {
+                    if (!sourceProductsById.ContainsKey(id))
+                    {
+                        continue;
+                    }
+
+                    var sourceProduct = sourceProductsById[id];
+
+                    if (string.IsNullOrWhiteSpace(sourceProduct.bvin))
+                    {
+                        continue;
+                    }
+
+                    var hcProduct = app.CatalogServices.Products.Find(sourceProduct.bvin);
+
+                    if (hcProduct == null)
+                    {
+                        continue;
+                    }
+
+
+                    var imageUrl = string.Empty;
+                    var portalId = PortalSettings.Current != null ? PortalSettings.Current.PortalId : 0;
+
+                    if (!string.IsNullOrWhiteSpace(hcProduct.ImageFileMedium) && !string.IsNullOrWhiteSpace(hcProduct.Bvin))
+                    {
+                        imageUrl = string.Format(
+                            "/Portals/{0}/Hotcakes/Data/products/{1}/medium/{2}",
+                            portalId,
+                            hcProduct.Bvin,
+                            hcProduct.ImageFileMedium);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(hcProduct.ImageFileSmall) && !string.IsNullOrWhiteSpace(hcProduct.Bvin))
+                    {
+                        imageUrl = string.Format(
+                            "/Portals/{0}/Hotcakes/Data/products/{1}/small/{2}",
+                            portalId,
+                            hcProduct.Bvin,
+                            hcProduct.ImageFileSmall);
+                    }
+
+                    var productUrl = string.Empty;
+
+                    if (!string.IsNullOrWhiteSpace(hcProduct.UrlSlug))
+                    {
+                        productUrl = "/hotcakesstore/product-viewer/" + hcProduct.UrlSlug;
+                    }
+
+                    result.Add(new RecommendedProductViewModel
+                    {
+                        Id = sourceProduct.Id,
+                        Bvin = sourceProduct.bvin,
+                        Sku = sourceProduct.SKU,
+                        Name = hcProduct.ProductName,
+                        ShortDescription = hcProduct.ShortDescription,
+                        ImageUrl = imageUrl,
+                        ProductUrl = productUrl,
+                        UrlSlug = hcProduct.UrlSlug,
+                        ListPrice = sourceProduct.ListPrice,
+                        SitePrice = sourceProduct.SitePrice
+                    });
+                }
+            }
+
+            return result;
         }
 
     }
