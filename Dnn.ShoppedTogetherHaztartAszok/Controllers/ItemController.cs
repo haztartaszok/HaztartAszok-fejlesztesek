@@ -82,22 +82,7 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
         }
 
         [ModuleAction(ControlKey = "Edit", TitleKey = "AddItem")]
-        public ActionResult Index()
-        {
-            var runCalc = Request.QueryString["runCalc"];
 
-            if (runCalc == "1")
-            {
-                var service = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
-                service.InitializeAllPairs();
-                service.PopulatePairCountsFromOrders();
-
-                ViewBag.Message = "Számolás lefutott.";
-            }
-
-            var model = new List<Item>();
-            return View(model);
-        }
 
         private IEnumerable<ShoppedTogetherProductPair> GetTopPairs(int productId)
         {
@@ -106,6 +91,29 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
             return service.GetPairsForProduct(productId)
                 .OrderByDescending(p => p.TogetherCount)
                 .Take(5);
+        }
+
+        public ActionResult RunSync()
+        {
+            var service = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
+            service.RunIncrementalSync();
+
+            return Content("Sync lefutott");
+        }
+
+        public ActionResult Index()
+        {
+            var runSync = Request.QueryString["runSync"];
+
+            if (runSync == "1")
+            {
+                var service = new ShoppedTogetherHaztartasok.Dnn.Services.ShoppedTogetherService();
+                service.RunIncrementalSync();
+                ViewBag.Message = "Sync lefutott.";
+            }
+
+            var model = new List<Item>();
+            return View(model);
         }
     }
 }

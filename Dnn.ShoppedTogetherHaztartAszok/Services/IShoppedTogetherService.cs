@@ -19,5 +19,7 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
 
         void PopulatePairCountsFromOrders();
 
+        void RunIncrementalSync();
+
     }
 }

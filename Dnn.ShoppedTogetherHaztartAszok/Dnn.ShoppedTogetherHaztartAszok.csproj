@@ -105,6 +105,7 @@
     </Compile>
     <Compile Include="Components\FeatureController.cs" />
     <Compile Include="Components\ItemManager.cs" />
+    <Compile Include="Components\ShoppedTogetherSyncScheduler.cs" />
     <Compile Include="Controllers\SettingsController.cs" />
     <Compile Include="Models\Item.cs" />
     <Compile Include="Controllers\ItemController.cs" />

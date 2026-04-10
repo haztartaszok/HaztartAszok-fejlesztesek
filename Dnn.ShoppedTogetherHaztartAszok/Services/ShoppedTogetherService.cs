@@ -257,5 +257,17 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
             }
         }
 
+        public void RunIncrementalSync()
+        {
+            var lastRun = GetLastSuccessfulSyncRun();
+
+            if (lastRun == null)
+            {
+                InitializeAllPairs();
+            }
+
+            PopulatePairCountsFromOrders();
+        }
+
     }
 }
