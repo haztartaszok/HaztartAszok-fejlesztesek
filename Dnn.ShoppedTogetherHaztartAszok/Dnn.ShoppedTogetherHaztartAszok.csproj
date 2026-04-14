@@ -164,6 +164,7 @@
     </Content>
     <Content Include="Views\Item\Index.cshtml" />
     <Content Include="Views\Item\Edit.cshtml" />
+    <Content Include="Views\Item\_RenderRecommendedProduct.cshtml" />
     <Content Include="Views\Settings\Settings.cshtml" />
     <Content Include="Providers\DataProviders\SqlDataProvider\00.00.02.SqlDataProvider" />
     <None Include="Web.Debug.config">

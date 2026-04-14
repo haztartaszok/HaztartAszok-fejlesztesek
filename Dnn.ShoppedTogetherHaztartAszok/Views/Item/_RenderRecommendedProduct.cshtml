@@ -1,0 +1,87 @@
+@model ShoppedTogetherHaztartasok.Dnn.Models.RecommendedProductViewModel
+@{
+    var hasCustomText = !string.IsNullOrWhiteSpace(Model.CustomPriceText);
+    var actionRequiresDetails = Model.HasOptions || Model.IsGiftCard || Model.IsBundle || Model.IsUserSuppliedPrice || Model.AllowUpcharge;
+    var viewText = "View";
+    var addToCartText = "Add To Cart";
+}
+
+<div class="panel panel-default" style="position: relative;">
+
+    @if (Model.IsOnSale)
+    {
+        <div style="position: absolute; top: 10px; left: 10px; background-color: #d9534f; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; z-index: 10;">
+            Akció!
+        </div>
+    }
+
+    <div class="panel-heading">
+        <h2><a href="@Model.ProductUrl">@Model.Name</a></h2>
+    </div>
+    <div class="panel-body">
+        <div class="hc-product-card-img">
+            <a href="@Model.ProductUrl">
+                @if (!string.IsNullOrWhiteSpace(Model.ImageUrl))
+                {
+                    <img class="img-responsive img-rounded" src="@Model.ImageUrl" alt="@Model.Name" />
+                }
+                else
+                {
+                    <div>@Model.Name</div>
+                }
+            </a>
+        </div>
+    </div>
+    <div class="text-details">
+        @if (hasCustomText)
+        {
+            <div class="hc-custom-price-badge">
+                @Model.CustomPriceText
+            </div>
+        }
+        else
+        {
+            <div class="hc-custom-price-badge white">
+                padding
+            </div>
+        }
+    </div>
+    <div class="panel-footer text-center">
+        <div class="product-price">
+            @if (Model.IsOnSale)
+            {
+                <span class="old-price" style="text-decoration: line-through; color: #999; margin-right: 8px; font-size: 0.9em;">
+                    @Model.ListPriceText
+                </span>
+                <span class="sale-price" style="color: #d9534f; font-weight: bold; font-size: 1.2em;">
+                    @Model.SitePriceText
+                </span>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.SitePriceText))
+            {
+                <span class="regular-price" style="font-weight: bold; font-size: 1.1em;">
+                    @Model.SitePriceText
+                </span>
+            }
+        </div>
+
+        @if (actionRequiresDetails)
+        {
+            <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
+                <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
+            </a>
+        }
+        else if (!string.IsNullOrWhiteSpace(Model.AddToCartUrl))
+        {
+            <a href="@Model.AddToCartUrl" class="add-to-cart-product btn btn-primary">
+                <span><em class="glyphicon glyphicon-shopping-cart"></em>@addToCartText</span>
+            </a>
+        }
+        else
+        {
+            <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
+                <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
+            </a>
+        }
+    </div>
+</div>

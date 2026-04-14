@@ -1,15 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Web;
 using DotNetNuke.Data;
 using ShoppedTogetherHaztartasok.Dnn.Models;
 using Hotcakes.Commerce;
 using DotNetNuke.Entities.Portals;
+using Hotcakes.Commerce.Urls;
 
 namespace ShoppedTogetherHaztartasok.Dnn.Services
 {
     public class ShoppedTogetherService : IShoppedTogetherService
     {
+        private static readonly CultureInfo HungarianCulture = CultureInfo.GetCultureInfo("hu-HU");
+
         public ShoppedTogetherSyncRun StartSyncRun()
         {
             var run = new ShoppedTogetherSyncRun
@@ -445,6 +450,16 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                         productUrl = "/hotcakesstore/product-viewer/" + hcProduct.UrlSlug;
                     }
 
+                    var addToCartUrl = string.Empty;
+                    var cartUrl = HccUrlBuilder.RouteHccUrl(HccRoute.Cart);
+                    if (!string.IsNullOrWhiteSpace(cartUrl) && !string.IsNullOrWhiteSpace(sourceProduct.SKU))
+                    {
+                        addToCartUrl = cartUrl
+                            + (cartUrl.Contains("?") ? "&" : "?")
+                            + "AddSku=" + HttpUtility.UrlEncode(sourceProduct.SKU)
+                            + "&AddSkuQty=1";
+                    }
+
                     result.Add(new RecommendedProductViewModel
                     {
                         Id = sourceProduct.Id,
@@ -454,9 +469,22 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                         ShortDescription = hcProduct.ShortDescription,
                         ImageUrl = imageUrl,
                         ProductUrl = productUrl,
+                        AddToCartUrl = addToCartUrl,
                         UrlSlug = hcProduct.UrlSlug,
                         ListPrice = sourceProduct.ListPrice,
-                        SitePrice = sourceProduct.SitePrice
+                        SitePrice = sourceProduct.SitePrice,
+                        ListPriceText = sourceProduct.ListPrice.HasValue
+                            ? sourceProduct.ListPrice.Value.ToString("N0", HungarianCulture) + " Ft"
+                            : string.Empty,
+                        SitePriceText = sourceProduct.SitePrice.HasValue
+                            ? sourceProduct.SitePrice.Value.ToString("N0", HungarianCulture) + " Ft"
+                            : string.Empty,
+                        CustomPriceText = hcProduct.SitePriceOverrideText,
+                        HasOptions = hcProduct.HasOptions(),
+                        IsGiftCard = hcProduct.IsGiftCard,
+                        IsBundle = hcProduct.IsBundle,
+                        IsUserSuppliedPrice = hcProduct.IsUserSuppliedPrice,
+                        AllowUpcharge = hcProduct.AllowUpcharge
                     });
                 }
             }

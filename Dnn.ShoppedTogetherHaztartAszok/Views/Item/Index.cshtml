@@ -1,8 +1,6 @@
 ﻿@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<IEnumerable<ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.Item>>
 
 @using System.Linq
-@using System.Text.RegularExpressions
-@using System.Collections.Generic
 @using DotNetNuke.Web.Mvc.Helpers
 @using ShoppedTogetherHaztartasok.Dnn.Models
 
@@ -35,100 +33,13 @@
 @if (recommendedProducts != null && recommendedProducts.Count > 0)
 {
     <div class="recommended-products-wrapper">
-        <h3>Ajánlott termékek</h3>
+        <h3>Ezeket szokták még vásárolni</h3>
 
         <div class="spc-grid hc-product-grid">
             @foreach (var product in recommendedProducts)
             {
                 <div class="spc-card hc-product-card">
-                    <div class="panel panel-default" style="position: relative;">
-
-                        @if (product.IsOnSale)
-                        {
-                            <div class="panel-heading">
-                                <span>Akció!</span>
-                            </div>
-                        }
-
-                        <div class="panel-body">
-                            <div class="hc-product-card-img">
-                                @if (!string.IsNullOrWhiteSpace(product.ProductUrl))
-                                {
-                                    <a href="@product.ProductUrl">
-                                        @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
-                                        {
-                                            <img class="img-responsive img-rounded"
-                                                 src="@product.ImageUrl"
-                                                 alt="@product.Name" />
-                                        }
-                                        else
-                                        {
-                                            <div>@product.Name</div>
-                                        }
-                                    </a>
-                                }
-                                else
-                                {
-                                    if (!string.IsNullOrWhiteSpace(product.ImageUrl))
-                                    {
-                                        <img class="img-responsive img-rounded"
-                                             src="@product.ImageUrl"
-                                             alt="@product.Name" />
-                                    }
-                                    else
-                                    {
-                                        <div>@product.Name</div>
-                                    }
-                                }
-                            </div>
-
-                            <div class="text-details">
-                                <div>
-                                    @if (!string.IsNullOrWhiteSpace(product.ProductUrl))
-                                    {
-                                        <a href="@product.ProductUrl">@product.Name</a>
-                                    }
-                                    else
-                                    {
-                                        <span>@product.Name</span>
-                                    }
-                                </div>
-
-                                @if (!string.IsNullOrWhiteSpace(product.ShortDescription))
-                                {
-                                    <div>@Html.Raw(product.ShortDescription)</div>
-                                }
-                            </div>
-                        </div>
-
-                        <div class="panel-footer text-center">
-                            <div>
-                                @if (product.ListPrice.HasValue && product.SitePrice.HasValue && product.ListPrice.Value > product.SitePrice.Value)
-                                {
-                                    <span style="text-decoration: line-through; margin-right: 8px;">
-                                        @string.Format("{0:N0} Ft", product.ListPrice.Value)
-                                    </span>
-                                }
-
-                                @if (product.SitePrice.HasValue)
-                                {
-                                    <span>
-                                        @string.Format("{0:N0} Ft", product.SitePrice.Value)
-                                    </span>
-                                }
-                            </div>
-
-                            <div style="margin-top:10px;">
-                                @if (!string.IsNullOrWhiteSpace(product.ProductUrl))
-                                {
-                                    <a href="@product.ProductUrl" class="btn btn-primary">
-                                        View Details
-                                    </a>
-                                }
-                            </div>
-                        </div>
-
-                    </div>
+                    @Html.Partial("_RenderRecommendedProduct", product)
                 </div>
             }
         </div>
