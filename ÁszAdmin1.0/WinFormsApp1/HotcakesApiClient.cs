@@ -31,7 +31,7 @@ namespace WinFormsApp1
             apiKey = settings.ApiKey.Trim();
             httpClient = new HttpClient
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout = TimeSpan.FromSeconds(45)
             };
         }
 
@@ -40,6 +40,25 @@ namespace WinFormsApp1
             HotcakesApiResponse<List<HotcakesCategorySnapshot>> response = await GetAsync<List<HotcakesCategorySnapshot>>(
                 "categories/",
                 null,
+                cancellationToken);
+
+            return response.Content ?? [];
+        }
+
+        public async Task<IReadOnlyList<HotcakesCategorySnapshot>> GetCategoriesForProductAsync(
+            string productBvin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["byproduct"] = productBvin.Trim()
+            };
+
+            HotcakesApiResponse<List<HotcakesCategorySnapshot>> response = await GetAsync<List<HotcakesCategorySnapshot>>(
+                "categories/",
+                queryParameters,
                 cancellationToken);
 
             return response.Content ?? [];
@@ -96,6 +115,116 @@ namespace WinFormsApp1
             return products;
         }
 
+        public async Task<HotcakesProduct?> GetProductBySkuAsync(
+            string sku,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sku);
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["bysku"] = sku.Trim()
+            };
+
+            HotcakesApiResponse<HotcakesProduct> response = await GetAsync<HotcakesProduct>(
+                "products/lookup",
+                queryParameters,
+                cancellationToken,
+                allowApiErrors: true);
+
+            if (response.Errors.Count == 0)
+            {
+                return response.Content;
+            }
+
+            if (response.Errors.All(static error => string.Equals(error.Code, "NULL", StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
+
+            throw BuildApiErrorException(
+                "A Hotcakes API nem tudta lekerdezni a keresett termeket SKU alapjan.",
+                BuildRequestUri("products/lookup", queryParameters),
+                HttpStatusCode.OK,
+                response.Errors);
+        }
+
+        public Task<HotcakesProduct> CreateProductAsync(
+            HotcakesProduct product,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+
+            return PostContentAsync(
+                "products/",
+                product,
+                static () => new HotcakesProduct(),
+                cancellationToken);
+        }
+
+        public Task<HotcakesProduct> UpdateProductAsync(
+            HotcakesProduct product,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+            ArgumentException.ThrowIfNullOrWhiteSpace(product.Bvin);
+
+            return PostContentAsync(
+                $"products/{Uri.EscapeDataString(product.Bvin)}",
+                product,
+                static () => new HotcakesProduct(),
+                cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<HotcakesProductInventory>> GetProductInventoriesAsync(
+            string productBvin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["byproduct"] = productBvin.Trim()
+            };
+
+            HotcakesApiResponse<List<HotcakesProductInventory>> response = await GetAsync<List<HotcakesProductInventory>>(
+                "productinventory/",
+                queryParameters,
+                cancellationToken);
+
+            return response.Content ?? [];
+        }
+
+        public Task<HotcakesProductInventory> UpsertProductInventoryAsync(
+            HotcakesProductInventory inventory,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(inventory);
+
+            string relativePath = string.IsNullOrWhiteSpace(inventory.Bvin)
+                ? "productinventory/"
+                : $"productinventory/{Uri.EscapeDataString(inventory.Bvin)}";
+
+            return PostContentAsync(
+                relativePath,
+                inventory,
+                static () => new HotcakesProductInventory(),
+                cancellationToken);
+        }
+
+        public Task<HotcakesCategoryProductAssociation> CreateCategoryProductAssociationAsync(
+            HotcakesCategoryProductAssociation association,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(association);
+
+            return PostContentAsync(
+                "categoryproductassociations/",
+                association,
+                static () => new HotcakesCategoryProductAssociation(),
+                cancellationToken);
+        }
+
         public void Dispose()
         {
             httpClient.Dispose();
@@ -111,14 +240,56 @@ namespace WinFormsApp1
             return response.Content ?? emptyFactory();
         }
 
-        private async Task<HotcakesApiResponse<T>> GetAsync<T>(
+        private async Task<TResponse> PostContentAsync<TRequest, TResponse>(
+            string relativePath,
+            TRequest payload,
+            Func<TResponse> emptyFactory,
+            CancellationToken cancellationToken)
+        {
+            HotcakesApiResponse<TResponse> response = await SendAsync<TRequest, TResponse>(
+                HttpMethod.Post,
+                relativePath,
+                null,
+                payload,
+                cancellationToken);
+
+            return response.Content ?? emptyFactory();
+        }
+
+        private Task<HotcakesApiResponse<T>> GetAsync<T>(
             string relativePath,
             IReadOnlyDictionary<string, string?>? queryParameters,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool allowApiErrors = false)
+        {
+            return SendAsync<object?, T>(
+                HttpMethod.Get,
+                relativePath,
+                queryParameters,
+                null,
+                cancellationToken,
+                allowApiErrors);
+        }
+
+        private async Task<HotcakesApiResponse<TResponse>> SendAsync<TRequest, TResponse>(
+            HttpMethod method,
+            string relativePath,
+            IReadOnlyDictionary<string, string?>? queryParameters,
+            TRequest? payload,
+            CancellationToken cancellationToken,
+            bool allowApiErrors = false)
         {
             Uri requestUri = BuildRequestUri(relativePath, queryParameters);
 
-            using HttpResponseMessage response = await httpClient.GetAsync(requestUri, cancellationToken);
+            using HttpRequestMessage request = new(method, requestUri);
+
+            if (payload is not null)
+            {
+                string json = JsonSerializer.Serialize(payload, JsonOptions);
+                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            }
+
+            using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
             string body = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -126,11 +297,11 @@ namespace WinFormsApp1
                 throw BuildRequestException(requestUri, response.StatusCode, body);
             }
 
-            HotcakesApiResponse<T>? parsedResponse;
+            HotcakesApiResponse<TResponse>? parsedResponse;
 
             try
             {
-                parsedResponse = JsonSerializer.Deserialize<HotcakesApiResponse<T>>(body, JsonOptions);
+                parsedResponse = JsonSerializer.Deserialize<HotcakesApiResponse<TResponse>>(body, JsonOptions);
             }
             catch (JsonException ex)
             {
@@ -151,9 +322,9 @@ namespace WinFormsApp1
                     []);
             }
 
-            if (parsedResponse.Errors.Count > 0)
+            if (!allowApiErrors && parsedResponse.Errors.Count > 0)
             {
-                throw new HotcakesApiException(
+                throw BuildApiErrorException(
                     $"A Hotcakes API hibat adott vissza ({relativePath}).",
                     requestUri,
                     response.StatusCode,
@@ -209,7 +380,7 @@ namespace WinFormsApp1
 
                 if (errorResponse is not null && errorResponse.Errors.Count > 0)
                 {
-                    return new HotcakesApiException(
+                    return BuildApiErrorException(
                         $"A Hotcakes keres nem sikerult ({(int)statusCode}).",
                         requestUri,
                         statusCode,
@@ -220,11 +391,24 @@ namespace WinFormsApp1
             {
             }
 
-            return new HotcakesApiException(
+            return BuildApiErrorException(
                 $"A Hotcakes keres nem sikerult ({(int)statusCode}).",
                 requestUri,
                 statusCode,
                 []);
+        }
+
+        private static HotcakesApiException BuildApiErrorException(
+            string message,
+            Uri requestUri,
+            HttpStatusCode? statusCode,
+            IReadOnlyList<HotcakesApiError> errors)
+        {
+            string details = errors.Count == 0
+                ? message
+                : $"{message} {string.Join(" | ", errors.Select(static error => error.ToString()))}";
+
+            return new HotcakesApiException(details, requestUri, statusCode, errors);
         }
     }
 
