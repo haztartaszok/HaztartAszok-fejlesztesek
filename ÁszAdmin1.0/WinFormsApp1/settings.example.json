@@ -1,0 +1,6 @@
+{
+  "Hotcakes": {
+    "BaseUrl": "http://szerver-cim-vagy-domain",
+    "ApiKey": "ide-jon-a-hotcakes-api-kulcs"
+  }
+}
