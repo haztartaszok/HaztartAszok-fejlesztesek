@@ -12,20 +12,37 @@ namespace WinFormsApp1
         private const int CardSpacing = 16;
         private const int BulkCardHeight = 380;
         private const int MinimumContentWidth = 760;
+        private const int StatusLabelHeight = 36;
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
+        private readonly List<HotcakesCategorySnapshot> loadedCategories = [];
+        private readonly Dictionary<string, HotcakesProduct> loadedProductsBySku = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HotcakesApiClient hotcakesClient;
+        private readonly Label importStatusLabel = new();
         private bool isUpdatingSheetSelection;
+        private bool hotcakesReady;
+        private bool isInitializingHotcakes;
+        private bool isLoadingHotcakesProducts;
+        private ProductImportValidationResult? lastValidationResult;
 
         public Form1()
         {
             InitializeComponent();
+            hotcakesClient = new HotcakesApiClient(AppSettings.Current.Hotcakes);
+            ConfigureImportStatusLabel();
             InitializeSelections();
 
             browseButton.Click += BrowseButton_Click;
             SablonButton.Click += SablonButton_Click;
             sheetComboBox.SelectedIndexChanged += SheetComboBox_SelectedIndexChanged;
+            importTypeComboBox.SelectedIndexChanged += ImportTypeComboBox_SelectedIndexChanged;
+            validateButton.Click += ValidateButton_Click;
+            importButton.Click += ImportButton_Click;
             Load += (_, _) => UpdateResponsiveLayout();
+            Load += async (_, _) => await InitializeHotcakesAsync();
             Resize += (_, _) => UpdateResponsiveLayout();
+            FormClosed += (_, _) => hotcakesClient.Dispose();
 
+            UpdateActionStates();
             UpdateResponsiveLayout();
         }
 
@@ -54,6 +71,108 @@ namespace WinFormsApp1
             sheetComboBox.Items.Clear();
             sheetComboBox.Enabled = false;
             ClearPreviewGrid();
+            SetStatusMessage("Valassz import fajlt az indulashoz.");
+        }
+
+        private void ConfigureImportStatusLabel()
+        {
+            importStatusLabel.AutoEllipsis = true;
+            importStatusLabel.ForeColor = Color.DimGray;
+            importStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            importStatusLabel.Text = "Hotcakes kapcsolat elokeszitese...";
+            footerPanel.Controls.Add(importStatusLabel);
+        }
+
+        private void SetStatusMessage(string message, bool isError = false)
+        {
+            importStatusLabel.Text = message;
+            importStatusLabel.ForeColor = isError ? Color.Firebrick : Color.DimGray;
+        }
+
+        private async Task InitializeHotcakesAsync()
+        {
+            if (isInitializingHotcakes)
+            {
+                return;
+            }
+
+            isInitializingHotcakes = true;
+            UpdateActionStates();
+            SetStatusMessage("Hotcakes kategoriak betoltese...");
+
+            try
+            {
+                IReadOnlyList<HotcakesCategorySnapshot> categories = await hotcakesClient.GetCategoriesAsync();
+
+                loadedCategories.Clear();
+                loadedCategories.AddRange(categories
+                    .OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase));
+
+                PopulateCategorySelectors();
+                hotcakesReady = true;
+                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria betoltve.");
+            }
+            catch (Exception ex)
+            {
+                hotcakesReady = false;
+                SetStatusMessage("Hotcakes kapcsolat nem elerheto. Az Excel elonezet tovabbra is mukodik.", true);
+
+                MessageBox.Show(
+                    this,
+                    $"A Hotcakes kategoriak betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "Hotcakes kapcsolat",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                isInitializingHotcakes = false;
+                UpdateActionStates();
+            }
+        }
+
+        private void PopulateCategorySelectors()
+        {
+            List<CategoryComboItem> categoryItems = loadedCategories
+                .Select(category => new CategoryComboItem(category.Name, category.Bvin, category.RewriteUrl))
+                .ToList();
+
+            List<object> priceItems = [new CategoryComboItem("Osszes kategoria", null, null)];
+            priceItems.AddRange(categoryItems);
+
+            List<object> targetItems = [new CategoryComboItem("Valasszon...", null, null)];
+            targetItems.AddRange(categoryItems);
+
+            ReplaceComboBoxItems(priceCategoryComboBox, priceItems, 0);
+            ReplaceComboBoxItems(sourceCategoryComboBox, categoryItems.Cast<object>().ToList(), categoryItems.Count > 0 ? 0 : -1);
+            ReplaceComboBoxItems(targetCategoryComboBox, targetItems, 0);
+        }
+
+        private static void ReplaceComboBoxItems(ComboBox comboBox, List<object> items, int selectedIndex)
+        {
+            comboBox.BeginUpdate();
+
+            try
+            {
+                comboBox.Items.Clear();
+                comboBox.Items.AddRange(items.ToArray());
+
+                comboBox.SelectedIndex = selectedIndex >= 0 && selectedIndex < comboBox.Items.Count
+                    ? selectedIndex
+                    : -1;
+            }
+            finally
+            {
+                comboBox.EndUpdate();
+            }
+        }
+
+        private void UpdateActionStates()
+        {
+            bool isBusy = isInitializingHotcakes || isLoadingHotcakesProducts;
+
+            validateButton.Enabled = hotcakesReady && !isBusy && loadedWorkbookSheets.Count > 0;
+            importButton.Enabled = hotcakesReady && !isBusy && lastValidationResult?.CanProceed == true;
         }
 
         private void UpdateResponsiveLayout()
@@ -260,6 +379,10 @@ namespace WinFormsApp1
                 historyButton.SetBounds(0, 5, historyWidth, buttonHeight);
                 importButton.SetBounds(footerPanel.Width - actionWidth, 5, actionWidth, buttonHeight);
                 validateButton.SetBounds(importButton.Left - buttonGap - actionWidth, 5, actionWidth, buttonHeight);
+
+                int statusLeft = historyButton.Right + buttonGap;
+                int statusWidth = Math.Max(0, validateButton.Left - buttonGap - statusLeft);
+                importStatusLabel.SetBounds(statusLeft, 8, statusWidth, StatusLabelHeight);
             }
             else
             {
@@ -268,8 +391,9 @@ namespace WinFormsApp1
                 historyButton.SetBounds(0, 0, fullWidth, buttonHeight);
                 validateButton.SetBounds(0, historyButton.Bottom + 8, fullWidth, buttonHeight);
                 importButton.SetBounds(0, validateButton.Bottom + 8, fullWidth, buttonHeight);
+                importStatusLabel.SetBounds(0, importButton.Bottom + 8, fullWidth, StatusLabelHeight);
 
-                footerPanel.Height = importButton.Bottom;
+                footerPanel.Height = importStatusLabel.Bottom;
             }
 
             return footerPanel.Bottom;
@@ -340,12 +464,26 @@ namespace WinFormsApp1
                 filePathTextBox.Text = openDialog.FileName;
 
                 PopulateSheetSelector();
+                lastValidationResult = null;
+                UpdateActionStates();
+
+                if (hotcakesReady)
+                {
+                    SetStatusMessage($"{loadedWorkbookSheets.Count} munkalap betoltve. Futtasd az ellenorzest a kovetkezo lepeshez.");
+                }
             }
             catch (Exception ex)
             {
                 loadedWorkbookSheets.Clear();
                 filePathTextBox.Clear();
                 PopulateSheetSelector();
+                lastValidationResult = null;
+                UpdateActionStates();
+
+                if (hotcakesReady)
+                {
+                    SetStatusMessage("Az Excel fajl beolvasasa nem sikerult.", true);
+                }
 
                 MessageBox.Show(
                     this,
@@ -363,7 +501,27 @@ namespace WinFormsApp1
                 return;
             }
 
+            lastValidationResult = null;
+            UpdateActionStates();
+
+            if (hotcakesReady && sheetComboBox.SelectedItem is not null)
+            {
+                SetStatusMessage($"Kivalasztott munkalap: {sheetComboBox.SelectedItem}.");
+            }
+
             ShowSelectedWorksheet();
+        }
+
+        private void ImportTypeComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            TrySelectSuggestedSheet();
+            lastValidationResult = null;
+            UpdateActionStates();
+
+            if (hotcakesReady && loadedWorkbookSheets.Count > 0)
+            {
+                SetStatusMessage("Az import tipus frissult. Ellenorizd a kijelolt munkalapot.");
+            }
         }
 
         private void PopulateSheetSelector()
@@ -397,8 +555,11 @@ namespace WinFormsApp1
 
             if (loadedWorkbookSheets.Count > 0)
             {
+                TrySelectSuggestedSheet();
                 ShowSelectedWorksheet();
             }
+
+            UpdateActionStates();
         }
 
         private void ShowSelectedWorksheet()
@@ -410,6 +571,484 @@ namespace WinFormsApp1
             }
 
             RenderWorksheet(loadedWorkbookSheets[sheetComboBox.SelectedIndex]);
+        }
+
+        private void TrySelectSuggestedSheet()
+        {
+            string? suggestedSheetName = GetSuggestedSheetName();
+
+            if (string.IsNullOrWhiteSpace(suggestedSheetName))
+            {
+                return;
+            }
+
+            int suggestedIndex = loadedWorkbookSheets.FindIndex(
+                sheet => string.Equals(NormalizeToken(sheet.Name), NormalizeToken(suggestedSheetName), StringComparison.Ordinal));
+
+            if (suggestedIndex < 0 || suggestedIndex == sheetComboBox.SelectedIndex)
+            {
+                return;
+            }
+
+            isUpdatingSheetSelection = true;
+
+            try
+            {
+                sheetComboBox.SelectedIndex = suggestedIndex;
+            }
+            finally
+            {
+                isUpdatingSheetSelection = false;
+            }
+
+            ShowSelectedWorksheet();
+        }
+
+        private string? GetSuggestedSheetName()
+        {
+            string selectedImportType = NormalizeToken(importTypeComboBox.SelectedItem?.ToString() ?? string.Empty);
+
+            if (selectedImportType.Contains("KEPIMPORT", StringComparison.Ordinal))
+            {
+                return "Kepek";
+            }
+
+            if (selectedImportType.Contains("KATEGORIAIMPORT", StringComparison.Ordinal))
+            {
+                return "Kategoriak";
+            }
+
+            if (selectedImportType.Contains("TULAJDONSAGIMPORT", StringComparison.Ordinal))
+            {
+                return "OpciokTulajdonsagok";
+            }
+
+            if (selectedImportType.Contains("TERMEKIMPORT", StringComparison.Ordinal) ||
+                selectedImportType.Contains("OSSZESIMPORTALASA", StringComparison.Ordinal))
+            {
+                return "Termekek";
+            }
+
+            return null;
+        }
+
+        private async void ValidateButton_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (!IsProductImportModeSelected())
+                {
+                    throw new InvalidOperationException(
+                        "Az elso ellenorzo lepes jelenleg a 'Termek import' vagy az 'Osszes importalasa' opciohoz keszult.");
+                }
+
+                UseWaitCursor = true;
+                await EnsureProductsLoadedAsync();
+
+                ProductImportValidationResult validationResult = ValidateCurrentProductImport();
+                lastValidationResult = validationResult;
+                UpdateActionStates();
+                SetStatusMessage(validationResult.StatusMessage, !validationResult.CanProceed);
+
+                MessageBox.Show(
+                    this,
+                    validationResult.DetailsMessage,
+                    "Import ellenorzes",
+                    MessageBoxButtons.OK,
+                    validationResult.CanProceed ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                lastValidationResult = null;
+                UpdateActionStates();
+                SetStatusMessage("A termek import ellenorzese nem sikerult.", true);
+
+                MessageBox.Show(
+                    this,
+                    $"A termek import ellenorzese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "Import ellenorzes",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                UseWaitCursor = false;
+            }
+        }
+
+        private async void ImportButton_Click(object? sender, EventArgs e)
+        {
+            if (lastValidationResult is null)
+            {
+                MessageBox.Show(
+                    this,
+                    "Import inditas elott futtasd le az ellenorzest.",
+                    "Import inditasa",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            if (!lastValidationResult.CanProceed)
+            {
+                MessageBox.Show(
+                    this,
+                    "Az import inditasa elott javitsd a validacios hibakat, majd futtasd ujra az ellenorzest.",
+                    "Import inditasa",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            SetStatusMessage("A Hotcakes olvasasi alapok keszen vannak. A kovetkezo lepes a tenyleges create/update muveletek bekotese.");
+
+            MessageBox.Show(
+                this,
+                "A Hotcakes kliens, a kategoriak es a termek-validacio mar keszen allnak. " +
+                "A kovetkezo implementacios korben mar kozvetlenul a create/update hivasokat lehet a validalt adatokra raepiteni.",
+                "Import inditasa",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private bool IsProductImportModeSelected()
+        {
+            string selectedImportType = NormalizeToken(importTypeComboBox.SelectedItem?.ToString() ?? string.Empty);
+
+            return selectedImportType.Contains("TERMEKIMPORT", StringComparison.Ordinal) ||
+                   selectedImportType.Contains("OSSZESIMPORTALASA", StringComparison.Ordinal);
+        }
+
+        private async Task EnsureProductsLoadedAsync()
+        {
+            if (loadedProductsBySku.Count > 0)
+            {
+                return;
+            }
+
+            isLoadingHotcakesProducts = true;
+            UpdateActionStates();
+            SetStatusMessage("Hotcakes termekek betoltese...");
+
+            try
+            {
+                IReadOnlyList<HotcakesProduct> products = await hotcakesClient.GetAllProductsAsync();
+                int duplicateSkuCount = 0;
+
+                loadedProductsBySku.Clear();
+
+                foreach (HotcakesProduct product in products)
+                {
+                    string sku = product.Sku.Trim();
+
+                    if (string.IsNullOrWhiteSpace(sku))
+                    {
+                        continue;
+                    }
+
+                    if (!loadedProductsBySku.TryAdd(sku, product))
+                    {
+                        duplicateSkuCount++;
+                    }
+                }
+
+                string duplicateSuffix = duplicateSkuCount > 0
+                    ? $" ({duplicateSkuCount} duplikalt API SKU kihagyva)"
+                    : string.Empty;
+
+                SetStatusMessage($"{loadedProductsBySku.Count} Hotcakes termek betoltve{duplicateSuffix}.");
+            }
+            finally
+            {
+                isLoadingHotcakesProducts = false;
+                UpdateActionStates();
+            }
+        }
+
+        private ProductImportValidationResult ValidateCurrentProductImport()
+        {
+            WorksheetPreview productWorksheet = GetProductWorksheetForValidation();
+            WorksheetTable productTable = BuildWorksheetTable(productWorksheet);
+
+            int skuColumnIndex = GetRequiredColumnIndex(productTable, "SKU");
+            int nameColumnIndex = GetOptionalColumnIndex(productTable, "Nev", "Name");
+            HashSet<string> seenSkus = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> duplicateSkus = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> knownCategorySlugs = loadedCategories
+                .Select(category => NormalizeToken(category.RewriteUrl))
+                .Where(slug => !string.IsNullOrWhiteSpace(slug))
+                .ToHashSet(StringComparer.Ordinal);
+
+            int missingSkuCount = 0;
+            int existingProductCount = 0;
+            int newProductCount = 0;
+            int missingNameForNewProductCount = 0;
+            List<string> missingNameSkus = [];
+
+            foreach ((int rowNumber, string[] rowValues) in productTable.Rows)
+            {
+                string sku = GetCellValue(rowValues, skuColumnIndex);
+
+                if (string.IsNullOrWhiteSpace(sku))
+                {
+                    missingSkuCount++;
+                    continue;
+                }
+
+                if (!seenSkus.Add(sku))
+                {
+                    duplicateSkus.Add(sku);
+                    continue;
+                }
+
+                if (loadedProductsBySku.ContainsKey(sku))
+                {
+                    existingProductCount++;
+                }
+                else
+                {
+                    newProductCount++;
+
+                    if (nameColumnIndex < 0 || string.IsNullOrWhiteSpace(GetCellValue(rowValues, nameColumnIndex)))
+                    {
+                        missingNameForNewProductCount++;
+                        missingNameSkus.Add(sku);
+                    }
+                }
+            }
+
+            WorksheetTable? categoryTable = TryBuildWorksheetTable("Kategoriak");
+            int categoryAssignmentCount = 0;
+            HashSet<string> unknownCategorySlugs = new(StringComparer.OrdinalIgnoreCase);
+
+            if (categoryTable is not null)
+            {
+                int categorySkuColumnIndex = GetRequiredColumnIndex(categoryTable, "SKU");
+                int categorySlugColumnIndex = GetRequiredColumnIndex(categoryTable, "KategoriaSlug", "CategorySlug", "RewriteUrl");
+
+                foreach ((int rowNumber, string[] rowValues) in categoryTable.Rows)
+                {
+                    string sku = GetCellValue(rowValues, categorySkuColumnIndex);
+                    string categorySlug = GetCellValue(rowValues, categorySlugColumnIndex);
+
+                    if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(categorySlug))
+                    {
+                        continue;
+                    }
+
+                    categoryAssignmentCount++;
+
+                    if (!knownCategorySlugs.Contains(NormalizeToken(categorySlug)))
+                    {
+                        unknownCategorySlugs.Add(categorySlug);
+                    }
+                }
+            }
+
+            bool canProceed = productTable.Rows.Count > 0 &&
+                              missingSkuCount == 0 &&
+                              duplicateSkus.Count == 0 &&
+                              missingNameForNewProductCount == 0 &&
+                              unknownCategorySlugs.Count == 0;
+
+            string statusMessage =
+                $"{productTable.Rows.Count} termeksor ellenorizve: {existingProductCount} frissitheto, {newProductCount} uj.";
+
+            if (duplicateSkus.Count > 0)
+            {
+                statusMessage += $" {duplicateSkus.Count} duplikalt SKU.";
+            }
+
+            if (unknownCategorySlugs.Count > 0)
+            {
+                statusMessage += $" {unknownCategorySlugs.Count} ismeretlen kategoria slug.";
+            }
+
+            StringBuilder detailsBuilder = new();
+            detailsBuilder.AppendLine($"Termek munkalap: {productTable.Name}");
+            detailsBuilder.AppendLine($"Adatsorok: {productTable.Rows.Count}");
+            detailsBuilder.AppendLine($"Frissitheto termekek: {existingProductCount}");
+            detailsBuilder.AppendLine($"Uj termekek: {newProductCount}");
+            detailsBuilder.AppendLine($"Ures SKU sorok: {missingSkuCount}");
+            detailsBuilder.AppendLine($"Duplikalt SKU-k: {duplicateSkus.Count}");
+            detailsBuilder.AppendLine($"Uj termeknel hianyzo Nev mezok: {missingNameForNewProductCount}");
+
+            if (categoryTable is not null)
+            {
+                detailsBuilder.AppendLine($"Kategoriarendeles sorok: {categoryAssignmentCount}");
+                detailsBuilder.AppendLine($"Ismeretlen KategoriaSlug ertekek: {unknownCategorySlugs.Count}");
+            }
+
+            if (duplicateSkus.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Pelda duplikalt SKU-k: {string.Join(", ", duplicateSkus.Take(5))}");
+            }
+
+            if (missingNameSkus.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Nev nelkuli uj SKU-k: {string.Join(", ", missingNameSkus.Take(5))}");
+            }
+
+            if (unknownCategorySlugs.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Ismeretlen kategoriak: {string.Join(", ", unknownCategorySlugs.Take(5))}");
+            }
+
+            detailsBuilder.AppendLine();
+            detailsBuilder.AppendLine(canProceed
+                ? "Az import olvasasi es ellenorzesi alapjai keszen allnak a kovetkezo fejlesztesi korhoz."
+                : "Az import inditasa elott erdemes javitani a fenti eltereseket.");
+
+            return new ProductImportValidationResult(
+                canProceed,
+                productTable.Rows.Count,
+                existingProductCount,
+                newProductCount,
+                missingSkuCount,
+                duplicateSkus.Count,
+                missingNameForNewProductCount,
+                categoryAssignmentCount,
+                unknownCategorySlugs.Count,
+                statusMessage,
+                detailsBuilder.ToString());
+        }
+
+        private WorksheetPreview GetProductWorksheetForValidation()
+        {
+            WorksheetPreview? namedWorksheet = FindWorksheetByName("Termekek");
+
+            if (namedWorksheet is not null)
+            {
+                return namedWorksheet;
+            }
+
+            if (sheetComboBox.SelectedIndex >= 0 && sheetComboBox.SelectedIndex < loadedWorkbookSheets.Count)
+            {
+                return loadedWorkbookSheets[sheetComboBox.SelectedIndex];
+            }
+
+            throw new InvalidOperationException("Nincs kijelolt vagy felismerheto termek munkalap.");
+        }
+
+        private WorksheetTable? TryBuildWorksheetTable(string sheetName)
+        {
+            WorksheetPreview? worksheet = FindWorksheetByName(sheetName);
+            return worksheet is null ? null : BuildWorksheetTable(worksheet);
+        }
+
+        private WorksheetPreview? FindWorksheetByName(string sheetName)
+        {
+            string normalizedSheetName = NormalizeToken(sheetName);
+
+            return loadedWorkbookSheets.FirstOrDefault(
+                sheet => string.Equals(NormalizeToken(sheet.Name), normalizedSheetName, StringComparison.Ordinal));
+        }
+
+        private static WorksheetTable BuildWorksheetTable(WorksheetPreview worksheet)
+        {
+            if (worksheet.Rows.Count == 0)
+            {
+                throw new InvalidOperationException($"A '{worksheet.Name}' munkalap ures.");
+            }
+
+            string[] headers = NormalizeRowLength(worksheet.Rows[0], worksheet.Rows[0].Length);
+
+            if (!headers.Any(header => !string.IsNullOrWhiteSpace(header)))
+            {
+                throw new InvalidOperationException($"A '{worksheet.Name}' munkalapon nem talalhato fejlec sor.");
+            }
+
+            Dictionary<string, int> headerIndexes = new(StringComparer.Ordinal);
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                string normalizedHeader = NormalizeToken(headers[i]);
+
+                if (!string.IsNullOrWhiteSpace(normalizedHeader) && !headerIndexes.ContainsKey(normalizedHeader))
+                {
+                    headerIndexes[normalizedHeader] = i;
+                }
+            }
+
+            List<(int RowNumber, string[] Values)> rows = [];
+
+            for (int rowIndex = 1; rowIndex < worksheet.Rows.Count; rowIndex++)
+            {
+                string[] rowValues = NormalizeRowLength(worksheet.Rows[rowIndex], headers.Length);
+
+                if (rowValues.All(string.IsNullOrWhiteSpace))
+                {
+                    continue;
+                }
+
+                rows.Add((rowIndex + 1, rowValues));
+            }
+
+            return new WorksheetTable(worksheet.Name, headerIndexes, rows);
+        }
+
+        private static int GetRequiredColumnIndex(WorksheetTable worksheet, params string[] aliases)
+        {
+            int index = GetOptionalColumnIndex(worksheet, aliases);
+
+            if (index >= 0)
+            {
+                return index;
+            }
+
+            throw new InvalidOperationException(
+                $"A '{worksheet.Name}' munkalaprol hianyzik a(z) {string.Join(" / ", aliases)} oszlop.");
+        }
+
+        private static int GetOptionalColumnIndex(WorksheetTable worksheet, params string[] aliases)
+        {
+            foreach (string alias in aliases)
+            {
+                if (worksheet.HeaderIndexes.TryGetValue(NormalizeToken(alias), out int index))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string GetCellValue(string[] rowValues, int columnIndex)
+        {
+            if (columnIndex < 0 || columnIndex >= rowValues.Length)
+            {
+                return string.Empty;
+            }
+
+            return rowValues[columnIndex].Trim();
+        }
+
+        private static string NormalizeToken(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            string decomposed = value.Normalize(NormalizationForm.FormD);
+            StringBuilder builder = new();
+
+            foreach (char character in decomposed)
+            {
+                UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(character);
+
+                if (category == UnicodeCategory.NonSpacingMark)
+                {
+                    continue;
+                }
+
+                if (char.IsLetterOrDigit(character))
+                {
+                    builder.Append(char.ToUpperInvariant(character));
+                }
+            }
+
+            return builder.ToString();
         }
 
         private void RenderWorksheet(WorksheetPreview worksheet)
@@ -980,6 +1619,32 @@ namespace WinFormsApp1
         }
 
         private sealed record TemplateSheet(string Name, string[] Headers);
+        private sealed record CategoryComboItem(string DisplayText, string? Bvin, string? Slug)
+        {
+            public override string ToString()
+            {
+                return DisplayText;
+            }
+        }
+
+        private sealed record WorksheetTable(
+            string Name,
+            Dictionary<string, int> HeaderIndexes,
+            List<(int RowNumber, string[] Values)> Rows);
+
+        private sealed record ProductImportValidationResult(
+            bool CanProceed,
+            int ProductRowCount,
+            int ExistingProductCount,
+            int NewProductCount,
+            int MissingSkuCount,
+            int DuplicateSkuCount,
+            int MissingNameForNewProductCount,
+            int CategoryAssignmentCount,
+            int UnknownCategorySlugCount,
+            string StatusMessage,
+            string DetailsMessage);
+
         private sealed record WorksheetPreview(string Name, List<string[]> Rows);
     }
 }
