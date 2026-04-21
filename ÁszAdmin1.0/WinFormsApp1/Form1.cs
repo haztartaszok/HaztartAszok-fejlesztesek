@@ -13,6 +13,7 @@ namespace WinFormsApp1
         private const int BulkCardHeight = 380;
         private const int MinimumContentWidth = 760;
         private const int StatusLabelHeight = 36;
+        private const string CustomPropertyDeveloperId = "AszAdmin1.0";
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
         private readonly List<HotcakesCategorySnapshot> loadedCategories = [];
         private readonly Dictionary<string, HotcakesProduct> loadedProductsBySku = new(StringComparer.OrdinalIgnoreCase);
@@ -23,7 +24,7 @@ namespace WinFormsApp1
         private bool isInitializingHotcakes;
         private bool isLoadingHotcakesProducts;
         private bool isImporting;
-        private ProductImportValidationResult? lastValidationResult;
+        private ImportValidationResult? lastValidationResult;
 
         public Form1()
         {
@@ -637,16 +638,10 @@ namespace WinFormsApp1
         {
             try
             {
-                if (!IsProductImportModeSelected())
-                {
-                    throw new InvalidOperationException(
-                        "A tenyleges import jelenleg a 'Termek import' vagy az 'Osszes importalasa' opciohoz keszult.");
-                }
-
                 UseWaitCursor = true;
                 await EnsureProductsLoadedAsync();
 
-                ProductImportValidationResult validationResult = ValidateCurrentProductImport();
+                ImportValidationResult validationResult = ValidateCurrentImport();
                 lastValidationResult = validationResult;
                 UpdateActionStates();
                 SetStatusMessage(validationResult.StatusMessage, !validationResult.CanProceed);
@@ -662,11 +657,11 @@ namespace WinFormsApp1
             {
                 lastValidationResult = null;
                 UpdateActionStates();
-                SetStatusMessage("A termek import ellenorzese nem sikerult.", true);
+                SetStatusMessage("Az import ellenorzese nem sikerult.", true);
 
                 MessageBox.Show(
                     this,
-                    $"A termek import ellenorzese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    $"Az import ellenorzese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Import ellenorzes",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -703,11 +698,7 @@ namespace WinFormsApp1
 
             DialogResult confirmationResult = MessageBox.Show(
                 this,
-                $"Valoban elinditod az importot?{Environment.NewLine}{Environment.NewLine}" +
-                $"Termeksorok: {lastValidationResult.ProductRowCount}{Environment.NewLine}" +
-                $"Uj termekek: {lastValidationResult.NewProductCount}{Environment.NewLine}" +
-                $"Meglevo termekek: {lastValidationResult.ExistingProductCount}{Environment.NewLine}" +
-                $"Kategoriakapcsolatok: {lastValidationResult.CategoryAssignmentCount}",
+                lastValidationResult.ConfirmationMessage,
                 "Import inditasa",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
@@ -723,8 +714,8 @@ namespace WinFormsApp1
                 isImporting = true;
                 UpdateActionStates();
 
-                ProductImportExecutionResult importResult = await RunValidatedProductImportAsync();
-                lastValidationResult = ValidateCurrentProductImport();
+                ImportExecutionResult importResult = await RunValidatedImportAsync();
+                lastValidationResult = ValidateCurrentImport();
                 UpdateActionStates();
                 SetStatusMessage(importResult.StatusMessage, importResult.ErrorCount > 0);
 
@@ -737,11 +728,11 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                SetStatusMessage("A termek import futtatasa nem sikerult.", true);
+                SetStatusMessage("Az import futtatasa nem sikerult.", true);
 
                 MessageBox.Show(
                     this,
-                    $"A termek import futtatasa nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    $"Az import futtatasa nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Import inditasa",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -754,12 +745,51 @@ namespace WinFormsApp1
             }
         }
 
-        private bool IsProductImportModeSelected()
+        private ImportScope GetSelectedImportScope()
         {
             string selectedImportType = NormalizeToken(importTypeComboBox.SelectedItem?.ToString() ?? string.Empty);
 
-            return selectedImportType.Contains("TERMEKIMPORT", StringComparison.Ordinal) ||
-                   selectedImportType.Contains("OSSZESIMPORTALASA", StringComparison.Ordinal);
+            if (selectedImportType.Contains("KEPIMPORT", StringComparison.Ordinal))
+            {
+                return ImportScope.Images;
+            }
+
+            if (selectedImportType.Contains("KATEGORIAIMPORT", StringComparison.Ordinal))
+            {
+                return ImportScope.Categories;
+            }
+
+            if (selectedImportType.Contains("TULAJDONSAGIMPORT", StringComparison.Ordinal))
+            {
+                return ImportScope.Properties;
+            }
+
+            if (selectedImportType.Contains("OSSZESIMPORTALASA", StringComparison.Ordinal))
+            {
+                return ImportScope.All;
+            }
+
+            return ImportScope.Products;
+        }
+
+        private bool IncludesProducts(ImportScope importScope)
+        {
+            return importScope is ImportScope.Products or ImportScope.All;
+        }
+
+        private bool IncludesCategories(ImportScope importScope)
+        {
+            return importScope is ImportScope.Products or ImportScope.Categories or ImportScope.All;
+        }
+
+        private bool IncludesImages(ImportScope importScope)
+        {
+            return importScope is ImportScope.Images or ImportScope.All;
+        }
+
+        private bool IncludesProperties(ImportScope importScope)
+        {
+            return importScope is ImportScope.Properties or ImportScope.All;
         }
 
         private async Task EnsureProductsLoadedAsync()
@@ -808,227 +838,365 @@ namespace WinFormsApp1
             }
         }
 
-        private ProductImportValidationResult ValidateCurrentProductImport()
+        private ImportValidationResult ValidateCurrentImport()
         {
-            WorksheetPreview productWorksheet = GetProductWorksheetForValidation();
-            WorksheetTable productTable = BuildWorksheetTable(productWorksheet);
+            ImportScope importScope = GetSelectedImportScope();
+            bool includesProducts = IncludesProducts(importScope);
+            bool includesCategories = IncludesCategories(importScope);
+            bool includesImages = IncludesImages(importScope);
+            bool includesProperties = IncludesProperties(importScope);
 
-            int skuColumnIndex = GetRequiredColumnIndex(productTable, "SKU");
-            int nameColumnIndex = GetOptionalColumnIndex(productTable, "Nev", "Name");
-            int priceColumnIndex = GetOptionalColumnIndex(productTable, "Ar", "Price");
-            int stockColumnIndex = GetOptionalColumnIndex(productTable, "Keszlet", "Inventory", "Stock");
-            int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType");
+            WorksheetTable? productTable = includesProducts
+                ? BuildWorksheetTable(GetProductWorksheetForValidation())
+                : null;
+            WorksheetTable? categoryTable = includesCategories
+                ? importScope == ImportScope.Categories
+                    ? GetRequiredNamedWorksheetTable("Kategoriak")
+                    : TryBuildWorksheetTable("Kategoriak")
+                : null;
+            WorksheetTable? imageTable = includesImages
+                ? importScope == ImportScope.Images
+                    ? GetRequiredNamedWorksheetTable("Kepek")
+                    : TryBuildWorksheetTable("Kepek")
+                : null;
+            WorksheetTable? propertyTable = includesProperties
+                ? importScope == ImportScope.Properties
+                    ? GetRequiredNamedWorksheetTable("OpciokTulajdonsagok")
+                    : TryBuildWorksheetTable("OpciokTulajdonsagok")
+                : null;
 
-            HashSet<string> seenSkus = new(StringComparer.OrdinalIgnoreCase);
-            HashSet<string> duplicateSkus = new(StringComparer.OrdinalIgnoreCase);
+            int productRowCount = 0;
+            int existingProductCount = 0;
+            int newProductCount = 0;
+            bool productCanProceed = true;
+            int productIssueCount = 0;
+            StringBuilder detailsBuilder = new();
+            HashSet<string> importedProductSkus = new(StringComparer.OrdinalIgnoreCase);
+
+            if (productTable is not null)
+            {
+                int skuColumnIndex = GetRequiredColumnIndex(productTable, "SKU");
+                int nameColumnIndex = GetOptionalColumnIndex(productTable, "Nev", "Name");
+                int priceColumnIndex = GetOptionalColumnIndex(productTable, "Ar", "Price");
+                int stockColumnIndex = GetOptionalColumnIndex(productTable, "Keszlet", "Inventory", "Stock");
+                int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType");
+
+                HashSet<string> seenSkus = new(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> duplicateSkus = new(StringComparer.OrdinalIgnoreCase);
+                int missingSkuCount = 0;
+                int missingNameForNewProductCount = 0;
+                int invalidPriceCount = 0;
+                int invalidStockCount = 0;
+                int ignoredProductTypeCount = 0;
+
+                List<string> missingNameSkus = [];
+                List<string> invalidPriceRows = [];
+                List<string> invalidStockRows = [];
+
+                foreach ((int rowNumber, string[] rowValues) in productTable.Rows)
+                {
+                    string sku = GetCellValue(rowValues, skuColumnIndex);
+
+                    if (string.IsNullOrWhiteSpace(sku))
+                    {
+                        missingSkuCount++;
+                        continue;
+                    }
+
+                    importedProductSkus.Add(sku);
+
+                    if (!seenSkus.Add(sku))
+                    {
+                        duplicateSkus.Add(sku);
+                        continue;
+                    }
+
+                    string rawPrice = GetCellValue(rowValues, priceColumnIndex);
+
+                    if (!string.IsNullOrWhiteSpace(rawPrice) && !TryParseImportDecimal(rawPrice, out _))
+                    {
+                        invalidPriceCount++;
+                        invalidPriceRows.Add($"{sku} (sor {rowNumber})");
+                    }
+
+                    string rawStock = GetCellValue(rowValues, stockColumnIndex);
+
+                    if (!string.IsNullOrWhiteSpace(rawStock) && !TryParseImportInt(rawStock, out _))
+                    {
+                        invalidStockCount++;
+                        invalidStockRows.Add($"{sku} (sor {rowNumber})");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(GetCellValue(rowValues, productTypeColumnIndex)))
+                    {
+                        ignoredProductTypeCount++;
+                    }
+
+                    if (loadedProductsBySku.ContainsKey(sku))
+                    {
+                        existingProductCount++;
+                    }
+                    else
+                    {
+                        newProductCount++;
+
+                        if (nameColumnIndex < 0 || string.IsNullOrWhiteSpace(GetCellValue(rowValues, nameColumnIndex)))
+                        {
+                            missingNameForNewProductCount++;
+                            missingNameSkus.Add(sku);
+                        }
+                    }
+                }
+
+                int existingSkuConflictCount = GetExistingProductImportMode() == ExistingProductImportMode.RejectExisting
+                    ? existingProductCount
+                    : 0;
+
+                productRowCount = productTable.Rows.Count;
+                productIssueCount = missingSkuCount +
+                                    duplicateSkus.Count +
+                                    missingNameForNewProductCount +
+                                    invalidPriceCount +
+                                    invalidStockCount +
+                                    existingSkuConflictCount;
+                productCanProceed = productTable.Rows.Count > 0 && productIssueCount == 0;
+
+                detailsBuilder.AppendLine($"Termek munkalap: {productTable.Name}");
+                detailsBuilder.AppendLine($"Adatsorok: {productTable.Rows.Count}");
+                detailsBuilder.AppendLine($"Frissitheto termekek: {existingProductCount}");
+                detailsBuilder.AppendLine($"Uj termekek: {newProductCount}");
+                detailsBuilder.AppendLine($"Ures SKU sorok: {missingSkuCount}");
+                detailsBuilder.AppendLine($"Duplikalt SKU-k: {duplicateSkus.Count}");
+                detailsBuilder.AppendLine($"Uj termeknel hianyzo Nev mezok: {missingNameForNewProductCount}");
+                detailsBuilder.AppendLine($"Hibas Ar mezok: {invalidPriceCount}");
+                detailsBuilder.AppendLine($"Hibas Keszlet mezok: {invalidStockCount}");
+                detailsBuilder.AppendLine($"Nem feldolgozott TermekTipus ertekek: {ignoredProductTypeCount}");
+
+                if (existingSkuConflictCount > 0)
+                {
+                    detailsBuilder.AppendLine($"'Uj termekkent hozzaadas' modban utkozo meglevo SKU-k: {existingSkuConflictCount}");
+                }
+
+                if (duplicateSkus.Count > 0)
+                {
+                    detailsBuilder.AppendLine($"Pelda duplikalt SKU-k: {string.Join(", ", duplicateSkus.Take(5))}");
+                }
+
+                if (missingNameSkus.Count > 0)
+                {
+                    detailsBuilder.AppendLine($"Nev nelkuli uj SKU-k: {string.Join(", ", missingNameSkus.Take(5))}");
+                }
+
+                if (invalidPriceRows.Count > 0)
+                {
+                    detailsBuilder.AppendLine($"Hibas Ar mezok: {string.Join(", ", invalidPriceRows.Take(5))}");
+                }
+
+                if (invalidStockRows.Count > 0)
+                {
+                    detailsBuilder.AppendLine($"Hibas Keszlet mezok: {string.Join(", ", invalidStockRows.Take(5))}");
+                }
+
+                if (ignoredProductTypeCount > 0)
+                {
+                    detailsBuilder.AppendLine("A TermekTipus oszlop jelenleg meg nem kerul ProductTypeId-ra lekepzesre, az ertekei import kozben kihagyasra kerulnek.");
+                }
+
+                if (existingSkuConflictCount > 0)
+                {
+                    detailsBuilder.AppendLine("A 'Uj termekkent hozzaadas' mod SKU-alapu importnal nem tamogatott a meglevo termekekre.");
+                }
+            }
+
+            CategorySheetValidationResult categoryValidation = includesCategories
+                ? ValidateCategorySheet(categoryTable, importedProductSkus)
+                : new CategorySheetValidationResult(0, 0, 0, 0, true, string.Empty);
+            ImageSheetValidationResult imageValidation = includesImages
+                ? ValidateImageSheet(imageTable, importedProductSkus)
+                : new ImageSheetValidationResult(0, 0, 0, 0, true, string.Empty);
+            PropertySheetValidationResult propertyValidation = includesProperties
+                ? ValidatePropertySheet(propertyTable, importedProductSkus)
+                : new PropertySheetValidationResult(0, 0, 0, true, string.Empty);
+
+            if (!string.IsNullOrWhiteSpace(categoryValidation.DetailsMessage))
+            {
+                if (detailsBuilder.Length > 0)
+                {
+                    detailsBuilder.AppendLine();
+                }
+
+                detailsBuilder.Append(categoryValidation.DetailsMessage);
+            }
+
+            if (!string.IsNullOrWhiteSpace(imageValidation.DetailsMessage))
+            {
+                if (detailsBuilder.Length > 0)
+                {
+                    detailsBuilder.AppendLine();
+                }
+
+                detailsBuilder.Append(imageValidation.DetailsMessage);
+            }
+
+            if (!string.IsNullOrWhiteSpace(propertyValidation.DetailsMessage))
+            {
+                if (detailsBuilder.Length > 0)
+                {
+                    detailsBuilder.AppendLine();
+                }
+
+                detailsBuilder.Append(propertyValidation.DetailsMessage);
+            }
+
+            int includedRowCount = productRowCount +
+                                   categoryValidation.RowCount +
+                                   imageValidation.RowCount +
+                                   propertyValidation.RowCount;
+            int totalIssueCount = productIssueCount +
+                                  categoryValidation.UnknownCategorySlugCount +
+                                  categoryValidation.UnknownCategorySkuCount +
+                                  categoryValidation.IncompleteRowCount +
+                                  imageValidation.MissingFileCount +
+                                  imageValidation.UnknownSkuCount +
+                                  imageValidation.IncompleteRowCount +
+                                  propertyValidation.UnknownSkuCount +
+                                  propertyValidation.IncompleteRowCount;
+
+            bool canProceed = includedRowCount > 0 &&
+                              productCanProceed &&
+                              categoryValidation.CanProceed &&
+                              imageValidation.CanProceed &&
+                              propertyValidation.CanProceed;
+
+            if (detailsBuilder.Length > 0)
+            {
+                detailsBuilder.AppendLine();
+            }
+
+            detailsBuilder.AppendLine(canProceed
+                ? "Az import keszen all a tenyleges feltoltes futtatasara."
+                : "Az import inditasa elott javitsd a fenti eltereseket.");
+
+            List<string> statusParts = [];
+
+            if (includesProducts)
+            {
+                statusParts.Add($"{productRowCount} termeksor: {existingProductCount} frissitheto, {newProductCount} uj");
+            }
+
+            if (includesCategories && categoryValidation.RowCount > 0)
+            {
+                statusParts.Add($"{categoryValidation.RowCount} kategoriakapcsolat");
+            }
+
+            if (includesImages && imageValidation.RowCount > 0)
+            {
+                statusParts.Add($"{imageValidation.RowCount} kepsor");
+            }
+
+            if (includesProperties && propertyValidation.RowCount > 0)
+            {
+                statusParts.Add($"{propertyValidation.RowCount} tulajdonsagsor");
+            }
+
+            string statusMessage = statusParts.Count == 0
+                ? "Nem talalhato importalhato adatsor."
+                : $"{string.Join(", ", statusParts)} ellenorizve.";
+
+            if (totalIssueCount > 0)
+            {
+                statusMessage += $" {totalIssueCount} validacios problemaval.";
+            }
+            else
+            {
+                statusMessage += " Az import indithato.";
+            }
+
+            return new ImportValidationResult(
+                canProceed,
+                productRowCount,
+                existingProductCount,
+                newProductCount,
+                categoryValidation.RowCount,
+                imageValidation.RowCount,
+                propertyValidation.RowCount,
+                totalIssueCount,
+                statusMessage,
+                detailsBuilder.ToString(),
+                BuildConfirmationMessage(
+                    includesProducts,
+                    includesCategories,
+                    includesImages,
+                    includesProperties,
+                    productRowCount,
+                    existingProductCount,
+                    newProductCount,
+                    categoryValidation.RowCount,
+                    imageValidation.RowCount,
+                    propertyValidation.RowCount));
+        }
+
+        private CategorySheetValidationResult ValidateCategorySheet(
+            WorksheetTable? categoryTable,
+            IReadOnlySet<string> importedProductSkus)
+        {
+            if (categoryTable is null)
+            {
+                return new CategorySheetValidationResult(0, 0, 0, 0, true, string.Empty);
+            }
+
+            int categorySkuColumnIndex = GetRequiredColumnIndex(categoryTable, "SKU");
+            int categorySlugColumnIndex = GetRequiredColumnIndex(categoryTable, "KategoriaSlug", "CategorySlug", "RewriteUrl");
             HashSet<string> knownCategorySlugs = loadedCategories
                 .Select(category => NormalizeToken(category.RewriteUrl))
                 .Where(slug => !string.IsNullOrWhiteSpace(slug))
                 .ToHashSet(StringComparer.Ordinal);
 
-            int missingSkuCount = 0;
-            int existingProductCount = 0;
-            int newProductCount = 0;
-            int missingNameForNewProductCount = 0;
-            int invalidPriceCount = 0;
-            int invalidStockCount = 0;
-            int ignoredProductTypeCount = 0;
-
-            List<string> missingNameSkus = [];
-            List<string> invalidPriceRows = [];
-            List<string> invalidStockRows = [];
-
-            foreach ((int rowNumber, string[] rowValues) in productTable.Rows)
-            {
-                string sku = GetCellValue(rowValues, skuColumnIndex);
-
-                if (string.IsNullOrWhiteSpace(sku))
-                {
-                    missingSkuCount++;
-                    continue;
-                }
-
-                if (!seenSkus.Add(sku))
-                {
-                    duplicateSkus.Add(sku);
-                    continue;
-                }
-
-                string rawPrice = GetCellValue(rowValues, priceColumnIndex);
-
-                if (!string.IsNullOrWhiteSpace(rawPrice) && !TryParseImportDecimal(rawPrice, out _))
-                {
-                    invalidPriceCount++;
-                    invalidPriceRows.Add($"{sku} (sor {rowNumber})");
-                }
-
-                string rawStock = GetCellValue(rowValues, stockColumnIndex);
-
-                if (!string.IsNullOrWhiteSpace(rawStock) && !TryParseImportInt(rawStock, out _))
-                {
-                    invalidStockCount++;
-                    invalidStockRows.Add($"{sku} (sor {rowNumber})");
-                }
-
-                if (!string.IsNullOrWhiteSpace(GetCellValue(rowValues, productTypeColumnIndex)))
-                {
-                    ignoredProductTypeCount++;
-                }
-
-                if (loadedProductsBySku.ContainsKey(sku))
-                {
-                    existingProductCount++;
-                }
-                else
-                {
-                    newProductCount++;
-
-                    if (nameColumnIndex < 0 || string.IsNullOrWhiteSpace(GetCellValue(rowValues, nameColumnIndex)))
-                    {
-                        missingNameForNewProductCount++;
-                        missingNameSkus.Add(sku);
-                    }
-                }
-            }
-
-            WorksheetTable? categoryTable = TryBuildWorksheetTable("Kategoriak");
-            int categoryAssignmentCount = 0;
+            int rowCount = 0;
             int unknownCategorySkuCount = 0;
             int incompleteCategoryRowCount = 0;
             HashSet<string> unknownCategorySlugs = new(StringComparer.OrdinalIgnoreCase);
             List<string> unknownCategorySkus = [];
 
-            if (categoryTable is not null)
+            foreach ((int rowNumber, string[] rowValues) in categoryTable.Rows)
             {
-                int categorySkuColumnIndex = GetRequiredColumnIndex(categoryTable, "SKU");
-                int categorySlugColumnIndex = GetRequiredColumnIndex(categoryTable, "KategoriaSlug", "CategorySlug", "RewriteUrl");
+                string sku = GetCellValue(rowValues, categorySkuColumnIndex);
+                string categorySlug = GetCellValue(rowValues, categorySlugColumnIndex);
 
-                foreach ((int rowNumber, string[] rowValues) in categoryTable.Rows)
+                bool hasSku = !string.IsNullOrWhiteSpace(sku);
+                bool hasCategorySlug = !string.IsNullOrWhiteSpace(categorySlug);
+
+                if (!hasSku && !hasCategorySlug)
                 {
-                    string sku = GetCellValue(rowValues, categorySkuColumnIndex);
-                    string categorySlug = GetCellValue(rowValues, categorySlugColumnIndex);
+                    continue;
+                }
 
-                    bool hasSku = !string.IsNullOrWhiteSpace(sku);
-                    bool hasCategorySlug = !string.IsNullOrWhiteSpace(categorySlug);
+                if (!hasSku || !hasCategorySlug)
+                {
+                    incompleteCategoryRowCount++;
+                    continue;
+                }
 
-                    if (!hasSku && !hasCategorySlug)
-                    {
-                        continue;
-                    }
+                rowCount++;
 
-                    if (!hasSku || !hasCategorySlug)
-                    {
-                        incompleteCategoryRowCount++;
-                        continue;
-                    }
+                if (!knownCategorySlugs.Contains(NormalizeToken(categorySlug)))
+                {
+                    unknownCategorySlugs.Add(categorySlug);
+                }
 
-                    categoryAssignmentCount++;
-
-                    if (!knownCategorySlugs.Contains(NormalizeToken(categorySlug)))
-                    {
-                        unknownCategorySlugs.Add(categorySlug);
-                    }
-
-                    if (!loadedProductsBySku.ContainsKey(sku) && !seenSkus.Contains(sku))
-                    {
-                        unknownCategorySkuCount++;
-                        unknownCategorySkus.Add($"{sku} (sor {rowNumber})");
-                    }
+                if (!loadedProductsBySku.ContainsKey(sku) && !importedProductSkus.Contains(sku))
+                {
+                    unknownCategorySkuCount++;
+                    unknownCategorySkus.Add($"{sku} (sor {rowNumber})");
                 }
             }
 
-            int existingSkuConflictCount = GetExistingProductImportMode() == ExistingProductImportMode.RejectExisting
-                ? existingProductCount
-                : 0;
-
-            bool canProceed = productTable.Rows.Count > 0 &&
-                              missingSkuCount == 0 &&
-                              duplicateSkus.Count == 0 &&
-                              missingNameForNewProductCount == 0 &&
-                              invalidPriceCount == 0 &&
-                              invalidStockCount == 0 &&
-                              existingSkuConflictCount == 0 &&
-                              unknownCategorySlugs.Count == 0 &&
-                              unknownCategorySkuCount == 0 &&
-                              incompleteCategoryRowCount == 0;
-
-            string statusMessage =
-                $"{productTable.Rows.Count} termeksor ellenorizve: {existingProductCount} frissitheto, {newProductCount} uj.";
-
-            if (categoryAssignmentCount > 0)
-            {
-                statusMessage += $" {categoryAssignmentCount} kategoriakapcsolat keszen all.";
-            }
-
-            if (duplicateSkus.Count > 0)
-            {
-                statusMessage += $" {duplicateSkus.Count} duplikalt SKU.";
-            }
-
-            if (invalidPriceCount > 0)
-            {
-                statusMessage += $" {invalidPriceCount} hibas ar.";
-            }
-
-            if (invalidStockCount > 0)
-            {
-                statusMessage += $" {invalidStockCount} hibas keszlet.";
-            }
-
-            if (unknownCategorySlugs.Count > 0)
-            {
-                statusMessage += $" {unknownCategorySlugs.Count} ismeretlen kategoria slug.";
-            }
-
-            if (unknownCategorySkuCount > 0)
-            {
-                statusMessage += $" {unknownCategorySkuCount} nem feloldhato kategoriarow.";
-            }
-
             StringBuilder detailsBuilder = new();
-            detailsBuilder.AppendLine($"Termek munkalap: {productTable.Name}");
-            detailsBuilder.AppendLine($"Adatsorok: {productTable.Rows.Count}");
-            detailsBuilder.AppendLine($"Frissitheto termekek: {existingProductCount}");
-            detailsBuilder.AppendLine($"Uj termekek: {newProductCount}");
-            detailsBuilder.AppendLine($"Ures SKU sorok: {missingSkuCount}");
-            detailsBuilder.AppendLine($"Duplikalt SKU-k: {duplicateSkus.Count}");
-            detailsBuilder.AppendLine($"Uj termeknel hianyzo Nev mezok: {missingNameForNewProductCount}");
-            detailsBuilder.AppendLine($"Hibas Ar mezok: {invalidPriceCount}");
-            detailsBuilder.AppendLine($"Hibas Keszlet mezok: {invalidStockCount}");
-            detailsBuilder.AppendLine($"Nem feldolgozott TermekTipus ertekek: {ignoredProductTypeCount}");
-
-            if (existingSkuConflictCount > 0)
-            {
-                detailsBuilder.AppendLine($"'Uj termekkent hozzaadas' modban utkozo meglevo SKU-k: {existingSkuConflictCount}");
-            }
-
-            if (categoryTable is not null)
-            {
-                detailsBuilder.AppendLine($"Kategoriarendeles sorok: {categoryAssignmentCount}");
-                detailsBuilder.AppendLine($"Ismeretlen KategoriaSlug ertekek: {unknownCategorySlugs.Count}");
-                detailsBuilder.AppendLine($"Nem feloldhato kategoriak SKU alapjan: {unknownCategorySkuCount}");
-                detailsBuilder.AppendLine($"Hianyos kategoriarow-k: {incompleteCategoryRowCount}");
-            }
-
-            if (duplicateSkus.Count > 0)
-            {
-                detailsBuilder.AppendLine($"Pelda duplikalt SKU-k: {string.Join(", ", duplicateSkus.Take(5))}");
-            }
-
-            if (missingNameSkus.Count > 0)
-            {
-                detailsBuilder.AppendLine($"Nev nelkuli uj SKU-k: {string.Join(", ", missingNameSkus.Take(5))}");
-            }
-
-            if (invalidPriceRows.Count > 0)
-            {
-                detailsBuilder.AppendLine($"Hibas Ar mezok: {string.Join(", ", invalidPriceRows.Take(5))}");
-            }
-
-            if (invalidStockRows.Count > 0)
-            {
-                detailsBuilder.AppendLine($"Hibas Keszlet mezok: {string.Join(", ", invalidStockRows.Take(5))}");
-            }
+            detailsBuilder.AppendLine($"Kategoria munkalap: {categoryTable.Name}");
+            detailsBuilder.AppendLine($"Kategoriarendeles sorok: {rowCount}");
+            detailsBuilder.AppendLine($"Ismeretlen KategoriaSlug ertekek: {unknownCategorySlugs.Count}");
+            detailsBuilder.AppendLine($"Nem feloldhato kategoriak SKU alapjan: {unknownCategorySkuCount}");
+            detailsBuilder.AppendLine($"Hianyos kategoriarow-k: {incompleteCategoryRowCount}");
 
             if (unknownCategorySlugs.Count > 0)
             {
@@ -1040,50 +1208,259 @@ namespace WinFormsApp1
                 detailsBuilder.AppendLine($"Nem feloldhato kategoriarow-k: {string.Join(", ", unknownCategorySkus.Take(5))}");
             }
 
-            if (ignoredProductTypeCount > 0)
-            {
-                detailsBuilder.AppendLine("A TermekTipus oszlop jelenleg meg nem kerul ProductTypeId-ra lekepzesre, az ertekei import kozben kihagyasra kerulnek.");
-            }
+            bool canProceed = unknownCategorySlugs.Count == 0 &&
+                              unknownCategorySkuCount == 0 &&
+                              incompleteCategoryRowCount == 0;
 
-            if (existingSkuConflictCount > 0)
-            {
-                detailsBuilder.AppendLine("A 'Uj termekkent hozzaadas' mod SKU-alapu importnal nem tamogatott a meglevo termekekre.");
-            }
-
-            detailsBuilder.AppendLine();
-            detailsBuilder.AppendLine(canProceed
-                ? "Az import keszen all a tenyleges create/update es kategoriakapcsolas futtatasara."
-                : "Az import inditasa elott javitsd a fenti eltereseket.");
-
-            return new ProductImportValidationResult(
-                canProceed,
-                productTable.Rows.Count,
-                existingProductCount,
-                newProductCount,
-                missingSkuCount,
-                duplicateSkus.Count,
-                missingNameForNewProductCount,
-                invalidPriceCount,
-                invalidStockCount,
-                existingSkuConflictCount,
-                categoryAssignmentCount,
+            return new CategorySheetValidationResult(
+                rowCount,
                 unknownCategorySlugs.Count,
                 unknownCategorySkuCount,
                 incompleteCategoryRowCount,
-                ignoredProductTypeCount,
-                statusMessage,
+                canProceed,
                 detailsBuilder.ToString());
         }
 
-        private async Task<ProductImportExecutionResult> RunValidatedProductImportAsync()
+        private ImageSheetValidationResult ValidateImageSheet(
+            WorksheetTable? imageTable,
+            IReadOnlySet<string> importedProductSkus)
+        {
+            if (imageTable is null)
+            {
+                return new ImageSheetValidationResult(0, 0, 0, 0, true, string.Empty);
+            }
+
+            int skuColumnIndex = GetRequiredColumnIndex(imageTable, "SKU");
+            int imagePathColumnIndex = GetOptionalColumnIndex(imageTable, "KepUtvonal", "ImagePath", "ImageFolder");
+            int imageNameColumnIndex = GetOptionalColumnIndex(imageTable, "KepNev", "ImageName", "FileName");
+            string workbookFilePath = GetCurrentWorkbookFilePath();
+
+            int rowCount = 0;
+            int missingFileCount = 0;
+            int unknownSkuCount = 0;
+            int incompleteRowCount = 0;
+
+            List<string> missingFileRows = [];
+            List<string> unknownSkuRows = [];
+
+            foreach ((int rowNumber, string[] rowValues) in imageTable.Rows)
+            {
+                string sku = GetCellValue(rowValues, skuColumnIndex);
+                string imagePath = GetCellValue(rowValues, imagePathColumnIndex);
+                string imageName = GetCellValue(rowValues, imageNameColumnIndex);
+
+                if (string.IsNullOrWhiteSpace(sku) && string.IsNullOrWhiteSpace(imagePath) && string.IsNullOrWhiteSpace(imageName))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(sku) || (string.IsNullOrWhiteSpace(imagePath) && string.IsNullOrWhiteSpace(imageName)))
+                {
+                    incompleteRowCount++;
+                    continue;
+                }
+
+                rowCount++;
+
+                if (!loadedProductsBySku.ContainsKey(sku) && !importedProductSkus.Contains(sku))
+                {
+                    unknownSkuCount++;
+                    unknownSkuRows.Add($"{sku} (sor {rowNumber})");
+                    continue;
+                }
+
+                if (!TryResolveImageFilePath(workbookFilePath, imagePath, imageName, out string? resolvedPath))
+                {
+                    missingFileCount++;
+                    missingFileRows.Add($"{sku} (sor {rowNumber}) -> {BuildImageReference(imagePath, imageName)}");
+                    continue;
+                }
+
+                if (!File.Exists(resolvedPath))
+                {
+                    missingFileCount++;
+                    missingFileRows.Add($"{sku} (sor {rowNumber}) -> {resolvedPath}");
+                }
+            }
+
+            StringBuilder detailsBuilder = new();
+            detailsBuilder.AppendLine($"Kepek munkalap: {imageTable.Name}");
+            detailsBuilder.AppendLine($"Kepsorok: {rowCount}");
+            detailsBuilder.AppendLine($"Hianyzo vagy nem feloldhato kepfajlok: {missingFileCount}");
+            detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
+            detailsBuilder.AppendLine($"Hianyos kepsorok: {incompleteRowCount}");
+
+            if (missingFileRows.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Pelda hianyzo kepfajlok: {string.Join(", ", missingFileRows.Take(5))}");
+            }
+
+            if (unknownSkuRows.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Nem feloldhato kep SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
+            }
+
+            bool canProceed = missingFileCount == 0 &&
+                              unknownSkuCount == 0 &&
+                              incompleteRowCount == 0;
+
+            return new ImageSheetValidationResult(
+                rowCount,
+                missingFileCount,
+                unknownSkuCount,
+                incompleteRowCount,
+                canProceed,
+                detailsBuilder.ToString());
+        }
+
+        private PropertySheetValidationResult ValidatePropertySheet(
+            WorksheetTable? propertyTable,
+            IReadOnlySet<string> importedProductSkus)
+        {
+            if (propertyTable is null)
+            {
+                return new PropertySheetValidationResult(0, 0, 0, true, string.Empty);
+            }
+
+            int skuColumnIndex = GetRequiredColumnIndex(propertyTable, "SKU");
+            int propertyNameColumnIndex = GetRequiredColumnIndex(propertyTable, "TulajdonsagNev", "PropertyName", "Key");
+            int propertyValueColumnIndex = GetOptionalColumnIndex(propertyTable, "TulajdonsagErtek", "PropertyValue", "Value");
+
+            int rowCount = 0;
+            int unknownSkuCount = 0;
+            int incompleteRowCount = 0;
+            List<string> unknownSkuRows = [];
+
+            foreach ((int rowNumber, string[] rowValues) in propertyTable.Rows)
+            {
+                string sku = GetCellValue(rowValues, skuColumnIndex);
+                string propertyName = GetCellValue(rowValues, propertyNameColumnIndex);
+                string propertyValue = GetCellValue(rowValues, propertyValueColumnIndex);
+
+                if (string.IsNullOrWhiteSpace(sku) &&
+                    string.IsNullOrWhiteSpace(propertyName) &&
+                    string.IsNullOrWhiteSpace(propertyValue))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(propertyName))
+                {
+                    incompleteRowCount++;
+                    continue;
+                }
+
+                rowCount++;
+
+                if (!loadedProductsBySku.ContainsKey(sku) && !importedProductSkus.Contains(sku))
+                {
+                    unknownSkuCount++;
+                    unknownSkuRows.Add($"{sku} (sor {rowNumber})");
+                }
+            }
+
+            StringBuilder detailsBuilder = new();
+            detailsBuilder.AppendLine($"Tulajdonsag munkalap: {propertyTable.Name}");
+            detailsBuilder.AppendLine($"Tulajdonsagsorok: {rowCount}");
+            detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
+            detailsBuilder.AppendLine($"Hianyos tulajdonsagsorok: {incompleteRowCount}");
+
+            if (unknownSkuRows.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Nem feloldhato tulajdonsag SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
+            }
+
+            bool canProceed = unknownSkuCount == 0 &&
+                              incompleteRowCount == 0;
+
+            return new PropertySheetValidationResult(
+                rowCount,
+                unknownSkuCount,
+                incompleteRowCount,
+                canProceed,
+                detailsBuilder.ToString());
+        }
+
+        private WorksheetTable GetRequiredNamedWorksheetTable(string sheetName)
+        {
+            return TryBuildWorksheetTable(sheetName)
+                ?? throw new InvalidOperationException($"A(z) '{sheetName}' munkalap nem talalhato az importfajlban.");
+        }
+
+        private static string BuildConfirmationMessage(
+            bool includesProducts,
+            bool includesCategories,
+            bool includesImages,
+            bool includesProperties,
+            int productRowCount,
+            int existingProductCount,
+            int newProductCount,
+            int categoryRowCount,
+            int imageRowCount,
+            int propertyRowCount)
+        {
+            StringBuilder builder = new();
+            builder.AppendLine("Valoban elinditod az importot?");
+            builder.AppendLine();
+
+            if (includesProducts)
+            {
+                builder.AppendLine($"Termeksorok: {productRowCount}");
+                builder.AppendLine($"Uj termekek: {newProductCount}");
+                builder.AppendLine($"Meglevo termekek: {existingProductCount}");
+            }
+
+            if (includesCategories)
+            {
+                builder.AppendLine($"Kategoriakapcsolatok: {categoryRowCount}");
+            }
+
+            if (includesImages)
+            {
+                builder.AppendLine($"Kepsorok: {imageRowCount}");
+            }
+
+            if (includesProperties)
+            {
+                builder.AppendLine($"Tulajdonsagsorok: {propertyRowCount}");
+            }
+
+            return builder.ToString().TrimEnd();
+        }
+
+        private async Task<ImportExecutionResult> RunValidatedImportAsync()
         {
             await EnsureProductsLoadedAsync();
 
-            WorksheetTable productTable = BuildWorksheetTable(GetProductWorksheetForValidation());
-            WorksheetTable? categoryTable = TryBuildWorksheetTable("Kategoriak");
+            ImportScope importScope = GetSelectedImportScope();
+            bool includesProducts = IncludesProducts(importScope);
+            bool includesCategories = IncludesCategories(importScope);
+            bool includesImages = IncludesImages(importScope);
+            bool includesProperties = IncludesProperties(importScope);
 
-            List<ProductImportRow> productRows = ParseProductImportRows(productTable);
+            WorksheetTable? productTable = includesProducts
+                ? BuildWorksheetTable(GetProductWorksheetForValidation())
+                : null;
+            WorksheetTable? categoryTable = includesCategories
+                ? importScope == ImportScope.Categories
+                    ? GetRequiredNamedWorksheetTable("Kategoriak")
+                    : TryBuildWorksheetTable("Kategoriak")
+                : null;
+            WorksheetTable? imageTable = includesImages
+                ? importScope == ImportScope.Images
+                    ? GetRequiredNamedWorksheetTable("Kepek")
+                    : TryBuildWorksheetTable("Kepek")
+                : null;
+            WorksheetTable? propertyTable = includesProperties
+                ? importScope == ImportScope.Properties
+                    ? GetRequiredNamedWorksheetTable("OpciokTulajdonsagok")
+                    : TryBuildWorksheetTable("OpciokTulajdonsagok")
+                : null;
+
+            List<ProductImportRow> productRows = productTable is null ? [] : ParseProductImportRows(productTable);
             List<CategoryImportRow> categoryRows = ParseCategoryImportRows(categoryTable);
+            List<ImageImportRow> imageRows = ParseImageImportRows(imageTable);
+            List<PropertyImportRow> propertyRows = ParsePropertyImportRows(propertyTable);
 
             ExistingProductImportMode existingProductMode = GetExistingProductImportMode();
             Dictionary<string, HotcakesProduct> resolvedProductsBySku = new(StringComparer.OrdinalIgnoreCase);
@@ -1092,6 +1469,10 @@ namespace WinFormsApp1
             int createdCount = 0;
             int updatedCount = 0;
             int skippedExistingCount = 0;
+            int categoryLinkedCount = 0;
+            int categoryAlreadyLinkedCount = 0;
+            int imageUploadedCount = 0;
+            int propertyAppliedCount = 0;
 
             for (int index = 0; index < productRows.Count; index++)
             {
@@ -1156,7 +1537,20 @@ namespace WinFormsApp1
                 }
             }
 
-            (int categoryLinkedCount, int categoryAlreadyLinkedCount) = await ImportCategoryRowsAsync(categoryRows, resolvedProductsBySku, errors);
+            if (categoryRows.Count > 0)
+            {
+                (categoryLinkedCount, categoryAlreadyLinkedCount) = await ImportCategoryRowsAsync(categoryRows, resolvedProductsBySku, errors);
+            }
+
+            if (imageRows.Count > 0)
+            {
+                imageUploadedCount = await ImportImageRowsAsync(imageRows, resolvedProductsBySku, errors);
+            }
+
+            if (propertyRows.Count > 0)
+            {
+                propertyAppliedCount = await ImportPropertyRowsAsync(propertyRows, resolvedProductsBySku, errors);
+            }
 
             StringBuilder detailsBuilder = new();
             detailsBuilder.AppendLine("Import eredmeny");
@@ -1165,6 +1559,8 @@ namespace WinFormsApp1
             detailsBuilder.AppendLine($"Kihagyott meglevo termekek: {skippedExistingCount}");
             detailsBuilder.AppendLine($"Letrehozott kategoriakapcsolatok: {categoryLinkedCount}");
             detailsBuilder.AppendLine($"Mar letezo vagy duplikalt kategoriakapcsolatok: {categoryAlreadyLinkedCount}");
+            detailsBuilder.AppendLine($"Feltoltott kepek: {imageUploadedCount}");
+            detailsBuilder.AppendLine($"Beallitott tulajdonsagok: {propertyAppliedCount}");
             detailsBuilder.AppendLine($"Import hibak: {errors.Count}");
 
             if (errors.Count > 0)
@@ -1184,20 +1580,46 @@ namespace WinFormsApp1
                 detailsBuilder.AppendLine("Megjegyzes: a TermekTipus oszlop jelenleg nincs ProductTypeId-ra lekotve, ezert az ertekei most nem kerultek feltoltesre.");
             }
 
-            string statusMessage =
-                $"Import lefutott: {createdCount} uj, {updatedCount} frissitett, {categoryLinkedCount} kategoriakapcsolat letrehozva.";
+            List<string> statusParts = [];
+
+            if (includesProducts)
+            {
+                statusParts.Add($"{createdCount} uj");
+                statusParts.Add($"{updatedCount} frissitett");
+            }
+
+            if (includesCategories)
+            {
+                statusParts.Add($"{categoryLinkedCount} kategoriakapcsolat");
+            }
+
+            if (includesImages)
+            {
+                statusParts.Add($"{imageUploadedCount} kep");
+            }
+
+            if (includesProperties)
+            {
+                statusParts.Add($"{propertyAppliedCount} tulajdonsag");
+            }
+
+            string statusMessage = statusParts.Count == 0
+                ? "Import lefutott."
+                : $"Import lefutott: {string.Join(", ", statusParts)} feldolgozva.";
 
             if (errors.Count > 0)
             {
                 statusMessage += $" {errors.Count} hibaval.";
             }
 
-            return new ProductImportExecutionResult(
+            return new ImportExecutionResult(
                 createdCount,
                 updatedCount,
                 skippedExistingCount,
                 categoryLinkedCount,
                 categoryAlreadyLinkedCount,
+                imageUploadedCount,
+                propertyAppliedCount,
                 errors.Count,
                 statusMessage,
                 detailsBuilder.ToString());
@@ -1289,6 +1711,244 @@ namespace WinFormsApp1
             }
 
             return (linkedCount, alreadyLinkedCount);
+        }
+
+        private async Task<int> ImportImageRowsAsync(
+            IReadOnlyList<ImageImportRow> imageRows,
+            IDictionary<string, HotcakesProduct> resolvedProductsBySku,
+            List<string> errors)
+        {
+            if (imageRows.Count == 0)
+            {
+                return 0;
+            }
+
+            string workbookFilePath = GetCurrentWorkbookFilePath();
+            int uploadedCount = 0;
+
+            for (int index = 0; index < imageRows.Count; index++)
+            {
+                ImageImportRow row = imageRows[index];
+                SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count})");
+
+                try
+                {
+                    HotcakesProduct? product = await ResolveProductBySkuAsync(row.Sku, resolvedProductsBySku);
+
+                    if (product is null)
+                    {
+                        errors.Add($"A(z) {row.RowNumber}. kepsor nem talal termeket ehhez az SKU-hoz: {row.Sku}.");
+                        continue;
+                    }
+
+                    if (!TryResolveImageFilePath(workbookFilePath, row.ImagePath, row.ImageName, out string? resolvedPath))
+                    {
+                        errors.Add($"A(z) {row.RowNumber}. kepsor kepfajlja nem talalhato: {BuildImageReference(row.ImagePath, row.ImageName)}.");
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(resolvedPath))
+                    {
+                        errors.Add($"A(z) {row.RowNumber}. kepsor kepfajlja ures feloldasi utvonalat adott vissza ({row.Sku}).");
+                        continue;
+                    }
+
+                    byte[] fileContent = await File.ReadAllBytesAsync(resolvedPath);
+                    string uploadFileName = Path.GetFileName(resolvedPath);
+                    bool uploaded = await hotcakesClient.UploadProductMainImageAsync(product.Bvin, uploadFileName, fileContent);
+
+                    if (!uploaded)
+                    {
+                        errors.Add($"A(z) {row.RowNumber}. kepsor feltoltese sikertelen volt ({row.Sku}): {uploadFileName}.");
+                        continue;
+                    }
+
+                    uploadedCount++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"A(z) {row.RowNumber}. kepsor importja nem sikerult ({row.Sku}): {ex.Message}");
+                }
+            }
+
+            return uploadedCount;
+        }
+
+        private async Task<int> ImportPropertyRowsAsync(
+            IReadOnlyList<PropertyImportRow> propertyRows,
+            IDictionary<string, HotcakesProduct> resolvedProductsBySku,
+            List<string> errors)
+        {
+            if (propertyRows.Count == 0)
+            {
+                return 0;
+            }
+
+            int appliedCount = 0;
+
+            foreach (IGrouping<string, PropertyImportRow> group in propertyRows
+                         .GroupBy(static row => row.Sku, StringComparer.OrdinalIgnoreCase))
+            {
+                PropertyImportRow firstRow = group.First();
+                SetStatusMessage($"Tulajdonsagok beallitasa... ({appliedCount + 1}/{propertyRows.Count})");
+
+                try
+                {
+                    HotcakesProduct? product = await ResolveProductBySkuAsync(group.Key, resolvedProductsBySku);
+
+                    if (product is null)
+                    {
+                        errors.Add($"A(z) {firstRow.RowNumber}. tulajdonsagsor nem talal termeket ehhez az SKU-hoz: {group.Key}.");
+                        continue;
+                    }
+
+                    ApplyImportedProperties(product, group);
+                    HotcakesProduct savedProduct = await hotcakesClient.UpdateProductAsync(product);
+
+                    loadedProductsBySku[group.Key] = savedProduct;
+                    resolvedProductsBySku[group.Key] = savedProduct;
+                    appliedCount += group.Count();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"A(z) {firstRow.RowNumber}. tulajdonsag importja nem sikerult ({group.Key}): {ex.Message}");
+                }
+            }
+
+            return appliedCount;
+        }
+
+        private async Task<HotcakesProduct?> ResolveProductBySkuAsync(
+            string sku,
+            IDictionary<string, HotcakesProduct> resolvedProductsBySku)
+        {
+            if (resolvedProductsBySku.TryGetValue(sku, out HotcakesProduct? resolvedProduct))
+            {
+                return resolvedProduct;
+            }
+
+            if (loadedProductsBySku.TryGetValue(sku, out HotcakesProduct? cachedProduct))
+            {
+                HotcakesProduct? currentProduct = await hotcakesClient.GetProductBySkuAsync(sku) ?? cachedProduct;
+                loadedProductsBySku[sku] = currentProduct;
+                resolvedProductsBySku[sku] = currentProduct;
+                return currentProduct;
+            }
+
+            HotcakesProduct? fetchedProduct = await hotcakesClient.GetProductBySkuAsync(sku);
+
+            if (fetchedProduct is not null)
+            {
+                loadedProductsBySku[sku] = fetchedProduct;
+                resolvedProductsBySku[sku] = fetchedProduct;
+            }
+
+            return fetchedProduct;
+        }
+
+        private static void ApplyImportedProperties(
+            HotcakesProduct product,
+            IEnumerable<PropertyImportRow> propertyRows)
+        {
+            product.CustomProperties ??= [];
+
+            foreach (PropertyImportRow row in propertyRows)
+            {
+                HotcakesCustomProperty? existingProperty = product.CustomProperties.FirstOrDefault(
+                    property => string.Equals(property.DeveloperId, CustomPropertyDeveloperId, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(property.Key, row.PropertyName, StringComparison.OrdinalIgnoreCase));
+
+                if (existingProperty is null)
+                {
+                    product.CustomProperties.Add(new HotcakesCustomProperty
+                    {
+                        DeveloperId = CustomPropertyDeveloperId,
+                        Key = row.PropertyName,
+                        Value = row.PropertyValue
+                    });
+                }
+                else
+                {
+                    existingProperty.Value = row.PropertyValue;
+                }
+            }
+        }
+
+        private static bool TryResolveImageFilePath(
+            string workbookFilePath,
+            string imagePath,
+            string imageName,
+            out string? resolvedPath)
+        {
+            string workbookDirectory = Path.GetDirectoryName(workbookFilePath) ?? AppContext.BaseDirectory;
+            List<string> candidates = [];
+
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                candidates.Add(imagePath);
+
+                if (!Path.IsPathRooted(imagePath))
+                {
+                    candidates.Add(Path.Combine(workbookDirectory, imagePath));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(imageName))
+            {
+                candidates.Add(imageName);
+
+                if (!Path.IsPathRooted(imageName))
+                {
+                    candidates.Add(Path.Combine(workbookDirectory, imageName));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(imagePath) && !string.IsNullOrWhiteSpace(imageName))
+            {
+                candidates.Add(Path.Combine(imagePath, imageName));
+
+                if (!Path.IsPathRooted(imagePath))
+                {
+                    candidates.Add(Path.Combine(workbookDirectory, imagePath, imageName));
+                }
+            }
+
+            foreach (string candidate in candidates.Where(candidate => !string.IsNullOrWhiteSpace(candidate)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string normalizedCandidate = Path.IsPathRooted(candidate)
+                    ? Path.GetFullPath(candidate)
+                    : Path.GetFullPath(candidate);
+
+                if (File.Exists(normalizedCandidate))
+                {
+                    resolvedPath = normalizedCandidate;
+                    return true;
+                }
+
+                if (Directory.Exists(normalizedCandidate) && !string.IsNullOrWhiteSpace(imageName))
+                {
+                    string combined = Path.Combine(normalizedCandidate, imageName);
+
+                    if (File.Exists(combined))
+                    {
+                        resolvedPath = Path.GetFullPath(combined);
+                        return true;
+                    }
+                }
+            }
+
+            resolvedPath = null;
+            return false;
+        }
+
+        private static string BuildImageReference(string imagePath, string imageName)
+        {
+            if (!string.IsNullOrWhiteSpace(imagePath) && !string.IsNullOrWhiteSpace(imageName))
+            {
+                return $"{imagePath}\\{imageName}";
+            }
+
+            return !string.IsNullOrWhiteSpace(imagePath) ? imagePath : imageName;
         }
 
         private static HotcakesProduct BuildImportedProduct(ProductImportRow row)
@@ -1454,6 +2114,92 @@ namespace WinFormsApp1
             }
 
             return rows;
+        }
+
+        private static List<ImageImportRow> ParseImageImportRows(WorksheetTable? imageTable)
+        {
+            if (imageTable is null)
+            {
+                return [];
+            }
+
+            int skuColumnIndex = GetRequiredColumnIndex(imageTable, "SKU");
+            int imagePathColumnIndex = GetOptionalColumnIndex(imageTable, "KepUtvonal", "ImagePath", "ImageFolder");
+            int imageNameColumnIndex = GetOptionalColumnIndex(imageTable, "KepNev", "ImageName", "FileName");
+
+            List<ImageImportRow> rows = [];
+
+            foreach ((int rowNumber, string[] rowValues) in imageTable.Rows)
+            {
+                string sku = GetCellValue(rowValues, skuColumnIndex);
+                string imagePath = GetCellValue(rowValues, imagePathColumnIndex);
+                string imageName = GetCellValue(rowValues, imageNameColumnIndex);
+
+                if (string.IsNullOrWhiteSpace(sku) &&
+                    string.IsNullOrWhiteSpace(imagePath) &&
+                    string.IsNullOrWhiteSpace(imageName))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(sku) || (string.IsNullOrWhiteSpace(imagePath) && string.IsNullOrWhiteSpace(imageName)))
+                {
+                    throw new InvalidOperationException($"A(z) {rowNumber}. kepsor csak reszben van kitoltve.");
+                }
+
+                rows.Add(new ImageImportRow(rowNumber, sku, imagePath, imageName));
+            }
+
+            return rows;
+        }
+
+        private static List<PropertyImportRow> ParsePropertyImportRows(WorksheetTable? propertyTable)
+        {
+            if (propertyTable is null)
+            {
+                return [];
+            }
+
+            int skuColumnIndex = GetRequiredColumnIndex(propertyTable, "SKU");
+            int propertyNameColumnIndex = GetRequiredColumnIndex(propertyTable, "TulajdonsagNev", "PropertyName", "Key");
+            int propertyValueColumnIndex = GetOptionalColumnIndex(propertyTable, "TulajdonsagErtek", "PropertyValue", "Value");
+
+            List<PropertyImportRow> rows = [];
+
+            foreach ((int rowNumber, string[] rowValues) in propertyTable.Rows)
+            {
+                string sku = GetCellValue(rowValues, skuColumnIndex);
+                string propertyName = GetCellValue(rowValues, propertyNameColumnIndex);
+                string propertyValue = GetCellValue(rowValues, propertyValueColumnIndex);
+
+                if (string.IsNullOrWhiteSpace(sku) &&
+                    string.IsNullOrWhiteSpace(propertyName) &&
+                    string.IsNullOrWhiteSpace(propertyValue))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(propertyName))
+                {
+                    throw new InvalidOperationException($"A(z) {rowNumber}. tulajdonsagsor csak reszben van kitoltve.");
+                }
+
+                rows.Add(new PropertyImportRow(rowNumber, sku, propertyName, propertyValue));
+            }
+
+            return rows;
+        }
+
+        private string GetCurrentWorkbookFilePath()
+        {
+            string workbookFilePath = filePathTextBox.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(workbookFilePath))
+            {
+                throw new InvalidOperationException("Nincs kivalasztott importfajl.");
+            }
+
+            return workbookFilePath;
         }
 
         private ExistingProductImportMode GetExistingProductImportMode()
@@ -2227,24 +2973,18 @@ namespace WinFormsApp1
             Dictionary<string, int> HeaderIndexes,
             List<(int RowNumber, string[] Values)> Rows);
 
-        private sealed record ProductImportValidationResult(
+        private sealed record ImportValidationResult(
             bool CanProceed,
             int ProductRowCount,
             int ExistingProductCount,
             int NewProductCount,
-            int MissingSkuCount,
-            int DuplicateSkuCount,
-            int MissingNameForNewProductCount,
-            int InvalidPriceCount,
-            int InvalidStockCount,
-            int ExistingSkuConflictCount,
             int CategoryAssignmentCount,
-            int UnknownCategorySlugCount,
-            int UnknownCategorySkuCount,
-            int IncompleteCategoryRowCount,
-            int IgnoredProductTypeCount,
+            int ImageRowCount,
+            int PropertyRowCount,
+            int ErrorCount,
             string StatusMessage,
-            string DetailsMessage);
+            string DetailsMessage,
+            string ConfirmationMessage);
 
         private sealed record ProductImportRow(
             int RowNumber,
@@ -2260,14 +3000,51 @@ namespace WinFormsApp1
             string Sku,
             string CategorySlug);
 
-        private sealed record ProductImportExecutionResult(
+        private sealed record ImageImportRow(
+            int RowNumber,
+            string Sku,
+            string ImagePath,
+            string ImageName);
+
+        private sealed record PropertyImportRow(
+            int RowNumber,
+            string Sku,
+            string PropertyName,
+            string PropertyValue);
+
+        private sealed record ImportExecutionResult(
             int CreatedCount,
             int UpdatedCount,
             int SkippedExistingCount,
             int CategoryLinkedCount,
             int CategoryAlreadyLinkedCount,
+            int ImageUploadedCount,
+            int PropertyAppliedCount,
             int ErrorCount,
             string StatusMessage,
+            string DetailsMessage);
+
+        private sealed record CategorySheetValidationResult(
+            int RowCount,
+            int UnknownCategorySlugCount,
+            int UnknownCategorySkuCount,
+            int IncompleteRowCount,
+            bool CanProceed,
+            string DetailsMessage);
+
+        private sealed record ImageSheetValidationResult(
+            int RowCount,
+            int MissingFileCount,
+            int UnknownSkuCount,
+            int IncompleteRowCount,
+            bool CanProceed,
+            string DetailsMessage);
+
+        private sealed record PropertySheetValidationResult(
+            int RowCount,
+            int UnknownSkuCount,
+            int IncompleteRowCount,
+            bool CanProceed,
             string DetailsMessage);
 
         private enum ExistingProductImportMode
@@ -2275,6 +3052,15 @@ namespace WinFormsApp1
             UpdateBySku,
             SkipExisting,
             RejectExisting
+        }
+
+        private enum ImportScope
+        {
+            Products,
+            Images,
+            Categories,
+            Properties,
+            All
         }
 
         private sealed record WorksheetPreview(string Name, List<string[]> Rows);

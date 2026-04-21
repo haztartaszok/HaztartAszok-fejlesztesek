@@ -84,6 +84,8 @@ namespace WinFormsApp1
 
         public long StoreId { get; set; }
 
+        public List<HotcakesCustomProperty> CustomProperties { get; set; } = [];
+
         public int Status { get; set; } = HotcakesProductStatuses.Active;
 
         public int InventoryMode { get; set; } = HotcakesInventoryModes.AlwayInStock;
@@ -93,6 +95,15 @@ namespace WinFormsApp1
 
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+    }
+
+    internal sealed class HotcakesCustomProperty
+    {
+        public string DeveloperId { get; set; } = string.Empty;
+
+        public string Key { get; set; } = string.Empty;
+
+        public string Value { get; set; } = string.Empty;
     }
 
     internal sealed class HotcakesProductInventory

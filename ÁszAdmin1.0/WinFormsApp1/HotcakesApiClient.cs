@@ -225,6 +225,57 @@ namespace WinFormsApp1
                 cancellationToken);
         }
 
+        public Task<bool> UploadProductMainImageAsync(
+            string productBvin,
+            string fileName,
+            byte[] fileContent,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+            ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+            ArgumentNullException.ThrowIfNull(fileContent);
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["filename"] = fileName.Trim()
+            };
+
+            return PostContentAsync(
+                $"productmainimage/{Uri.EscapeDataString(productBvin.Trim())}",
+                queryParameters,
+                fileContent,
+                static () => false,
+                cancellationToken);
+        }
+
+        public Task<bool> UploadProductAdditionalImageAsync(
+            string productBvin,
+            string fileName,
+            byte[] fileContent,
+            string imageBvin = "",
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+            ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+            ArgumentNullException.ThrowIfNull(fileContent);
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["filename"] = fileName.Trim()
+            };
+
+            string relativePath = string.IsNullOrWhiteSpace(imageBvin)
+                ? $"productimagesupload/{Uri.EscapeDataString(productBvin.Trim())}/"
+                : $"productimagesupload/{Uri.EscapeDataString(productBvin.Trim())}/{Uri.EscapeDataString(imageBvin.Trim())}";
+
+            return PostContentAsync(
+                relativePath,
+                queryParameters,
+                fileContent,
+                static () => false,
+                cancellationToken);
+        }
+
         public void Dispose()
         {
             httpClient.Dispose();
@@ -246,10 +297,25 @@ namespace WinFormsApp1
             Func<TResponse> emptyFactory,
             CancellationToken cancellationToken)
         {
+            return await PostContentAsync(
+                relativePath,
+                null,
+                payload,
+                emptyFactory,
+                cancellationToken);
+        }
+
+        private async Task<TResponse> PostContentAsync<TRequest, TResponse>(
+            string relativePath,
+            IReadOnlyDictionary<string, string?>? queryParameters,
+            TRequest payload,
+            Func<TResponse> emptyFactory,
+            CancellationToken cancellationToken)
+        {
             HotcakesApiResponse<TResponse> response = await SendAsync<TRequest, TResponse>(
                 HttpMethod.Post,
                 relativePath,
-                null,
+                queryParameters,
                 payload,
                 cancellationToken);
 
@@ -285,8 +351,8 @@ namespace WinFormsApp1
 
             if (payload is not null)
             {
-                string json = JsonSerializer.Serialize(payload, JsonOptions);
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                string json = SerializePayload(payload);
+                request.Content = new StringContent(json, Encoding.UTF8, GetContentType(payload));
             }
 
             using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
@@ -392,10 +458,50 @@ namespace WinFormsApp1
             }
 
             return BuildApiErrorException(
-                $"A Hotcakes keres nem sikerult ({(int)statusCode}).",
+                BuildFallbackErrorMessage(statusCode, body),
                 requestUri,
                 statusCode,
                 []);
+        }
+
+        private static string SerializePayload<TRequest>(TRequest payload)
+        {
+            if (payload is byte[] bytes)
+            {
+                int[] numericBytes = bytes.Select(static value => (int)value).ToArray();
+                return JsonSerializer.Serialize(numericBytes, JsonOptions);
+            }
+
+            return JsonSerializer.Serialize(payload, JsonOptions);
+        }
+
+        private static string GetContentType<TRequest>(TRequest payload)
+        {
+            return payload is byte[]
+                ? "application/x-www-form-urlencoded"
+                : "application/json";
+        }
+
+        private static string BuildFallbackErrorMessage(HttpStatusCode statusCode, string body)
+        {
+            string message = $"A Hotcakes keres nem sikerult ({(int)statusCode}).";
+            string trimmedBody = body.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmedBody))
+            {
+                return message;
+            }
+
+            string singleLineBody = string.Join(" ", trimmedBody
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.Trim()));
+
+            if (singleLineBody.Length > 240)
+            {
+                singleLineBody = singleLineBody[..240] + "...";
+            }
+
+            return $"{message} Valasz: {singleLineBody}";
         }
 
         private static HotcakesApiException BuildApiErrorException(
