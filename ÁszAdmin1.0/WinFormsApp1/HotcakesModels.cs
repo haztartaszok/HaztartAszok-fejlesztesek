@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -87,6 +88,9 @@ namespace WinFormsApp1
 
         public int InventoryMode { get; set; } = HotcakesInventoryModes.AlwayInStock;
 
+        [JsonConverter(typeof(HotcakesDateTimeConverter))]
+        public DateTime CreationDateUtc { get; set; } = DateTime.UtcNow;
+
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? AdditionalData { get; set; }
     }
@@ -95,7 +99,8 @@ namespace WinFormsApp1
     {
         public string Bvin { get; set; } = string.Empty;
 
-        public DateTime LastUpdated { get; set; }
+        [JsonConverter(typeof(HotcakesDateTimeConverter))]
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
         public string ProductBvin { get; set; } = string.Empty;
 
@@ -138,5 +143,72 @@ namespace WinFormsApp1
         public const int Disabled = 0;
         public const int Active = 1;
         public const int NotSet = -1;
+    }
+
+    internal sealed class HotcakesDateTimeConverter : JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                string? rawValue = reader.GetString();
+
+                if (string.IsNullOrWhiteSpace(rawValue))
+                {
+                    return default;
+                }
+
+                if (TryParseMicrosoftDate(rawValue, out DateTime microsoftDate))
+                {
+                    return microsoftDate;
+                }
+
+                if (DateTime.TryParse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime parsedDate) ||
+                    DateTime.TryParse(rawValue, CultureInfo.CurrentCulture, DateTimeStyles.RoundtripKind, out parsedDate))
+                {
+                    return parsedDate;
+                }
+            }
+
+            if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out long unixMilliseconds))
+            {
+                return DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds).UtcDateTime;
+            }
+
+            throw new JsonException("A datum formatuma nem tamogatott.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        {
+            DateTime outputValue = value == default ? DateTime.UtcNow : value.ToUniversalTime();
+            writer.WriteStringValue(outputValue.ToString("O", CultureInfo.InvariantCulture));
+        }
+
+        private static bool TryParseMicrosoftDate(string rawValue, out DateTime value)
+        {
+            const string prefix = "/Date(";
+            const string suffix = ")/";
+
+            if (rawValue.StartsWith(prefix, StringComparison.Ordinal) &&
+                rawValue.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                string ticksPart = rawValue.Substring(prefix.Length, rawValue.Length - prefix.Length - suffix.Length);
+                int signIndex = ticksPart.IndexOfAny(['+', '-']);
+
+                if (signIndex >= 0)
+                {
+                    ticksPart = ticksPart[..signIndex];
+                }
+
+                if (long.TryParse(ticksPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out long unixMilliseconds))
+                {
+                    value = DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds).UtcDateTime;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
     }
 }

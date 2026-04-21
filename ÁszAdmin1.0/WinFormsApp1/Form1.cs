@@ -1350,25 +1350,16 @@ namespace WinFormsApp1
 
         private async Task UpsertInventoryAsync(HotcakesProduct product, int quantityOnHand)
         {
-            IReadOnlyList<HotcakesProductInventory> inventories = await hotcakesClient.GetProductInventoriesAsync(product.Bvin);
-
-            HotcakesProductInventory inventory = inventories
-                .FirstOrDefault(existingInventory => string.IsNullOrWhiteSpace(existingInventory.VariantId))
-                ?? inventories.FirstOrDefault()
-                ?? new HotcakesProductInventory
-                {
-                    ProductBvin = product.Bvin,
-                    VariantId = string.Empty
-                };
-
-            inventory.ProductBvin = product.Bvin;
-            inventory.VariantId ??= string.Empty;
-            inventory.QuantityOnHand = quantityOnHand;
-
-            if (inventory.LastUpdated == default)
+            HotcakesProductInventory inventory = new()
             {
-                inventory.LastUpdated = DateTime.UtcNow;
-            }
+                ProductBvin = product.Bvin,
+                VariantId = string.Empty,
+                QuantityOnHand = quantityOnHand,
+                QuantityReserved = 0,
+                LowStockPoint = 0,
+                OutOfStockPoint = 0,
+                LastUpdated = DateTime.UtcNow
+            };
 
             await hotcakesClient.UpsertProductInventoryAsync(inventory);
         }
