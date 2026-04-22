@@ -109,7 +109,7 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
             return Content("ADMINSTATS ACTION FUT");
         }
 
-        public ActionResult Index()
+        public ActionResult Index(int? productId = null)
         {
             var runSync = Request.QueryString["runSync"];
 
@@ -170,14 +170,26 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
 
             var model = new List<Item>();
 
-            // csak admin oldalon jelenjen meg a stat
             if (PortalSettings.ActiveTab.TabName == "Admin Statisztika")
             {
                 var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
                 var repo = new StatisticsRepository(connString);
+
                 var products = repo.GetProducts();
 
-                return View("AdminStats", products);
+                var vm = new AdminStatsViewModel
+                {
+                    Products = products,
+                    SelectedProductId = productId,
+                    SelectedProductName = productId.HasValue
+                        ? products.FirstOrDefault(p => p.Id == productId.Value)?.ProductName
+                        : null,
+                    RelatedProducts = productId.HasValue
+                        ? repo.GetTopRelatedProducts(productId.Value)
+                        : new List<RelatedProductStat>()
+                };
+
+                return View("AdminStats", vm);
             }
 
             return View(model);

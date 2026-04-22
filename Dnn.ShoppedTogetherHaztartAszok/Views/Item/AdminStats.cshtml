@@ -1,13 +1,70 @@
-@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<IEnumerable<ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.ProductItem>>
+@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.AdminStatsViewModel>
 @using System.Linq
 @using DotNetNuke.Web.Mvc.Helpers
 @using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models
 
+
 <h2>Admin statisztika – terméklista</h2>
 
-<ul>
-    @foreach (var p in Model)
+<div style="margin-bottom:20px;">
+    <label for="productFilter">Termék:</label>
+    <select id="productFilter" name="productFilter">
+        <option value="">-- Válassz terméket --</option>
+        @foreach (var p in Model.Products)
+        {
+            <option value="@p.Id" @(Model.SelectedProductId == p.Id ? "selected=\"selected\"" : "")>
+                @p.ProductName
+            </option>
+        }
+    </select>
+</div>
+
+@if (Model.SelectedProductId.HasValue)
+{
+    <h3>@Model.SelectedProductName termékkel együtt vásárolt termékek</h3>
+
+    if (Model.RelatedProducts != null && Model.RelatedProducts.Count > 0)
     {
-        <li>@p.Id - @p.ProductName</li>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Termék</th>
+                    <th>Együtt vásárlások száma</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.RelatedProducts)
+                {
+                    <tr>
+                        <td>@item.ProductName</td>
+                        <td>@item.TogetherCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
     }
-</ul>
+    else
+    {
+        <p>Nincs találat a kiválasztott termékhez.</p>
+    }
+}
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var filter = document.getElementById("productFilter");
+        if (!filter) return;
+
+        filter.addEventListener("change", function () {
+            var value = this.value;
+            var baseUrl = window.location.pathname;
+
+            if (value) {
+                window.location.href = baseUrl + "?productId=" + encodeURIComponent(value);
+            } else {
+                window.location.href = baseUrl;
+            }
+        });
+    });
+</script>
+
