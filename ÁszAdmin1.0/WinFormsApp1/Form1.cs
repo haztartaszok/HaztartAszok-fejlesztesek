@@ -1789,6 +1789,13 @@ namespace WinFormsApp1
                         continue;
                     }
 
+                    if (uploadAsMainImage)
+                    {
+                        product = await SaveMainImageMetadataAsync(product, uploadFileName);
+                        loadedProductsBySku[row.Sku] = product;
+                        resolvedProductsBySku[row.Sku] = product;
+                    }
+
                     successfulImageUploadCountsBySku[row.Sku] = successfulImageUploadCountsBySku.TryGetValue(row.Sku, out int currentCount)
                         ? currentCount + 1
                         : 1;
@@ -1811,6 +1818,35 @@ namespace WinFormsApp1
             }
 
             return (uploadedCount, mainImageCount, additionalImageCount);
+        }
+
+        private async Task<HotcakesProduct> SaveMainImageMetadataAsync(HotcakesProduct product, string fileName)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+            ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+
+            string normalizedFileName = fileName.Trim();
+            string alternateText = string.IsNullOrWhiteSpace(product.ProductName)
+                ? normalizedFileName
+                : product.ProductName.Trim();
+
+            bool requiresUpdate =
+                !string.Equals(product.ImageFileSmall, normalizedFileName, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(product.ImageFileMedium, normalizedFileName, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(product.ImageFileSmallAlternateText, alternateText, StringComparison.Ordinal) ||
+                !string.Equals(product.ImageFileMediumAlternateText, alternateText, StringComparison.Ordinal);
+
+            if (!requiresUpdate)
+            {
+                return product;
+            }
+
+            product.ImageFileSmall = normalizedFileName;
+            product.ImageFileMedium = normalizedFileName;
+            product.ImageFileSmallAlternateText = alternateText;
+            product.ImageFileMediumAlternateText = alternateText;
+
+            return await hotcakesClient.UpdateProductAsync(product);
         }
 
         private async Task<int> ImportPropertyRowsAsync(

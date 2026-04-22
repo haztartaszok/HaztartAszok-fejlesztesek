@@ -72,6 +72,14 @@ namespace WinFormsApp1
 
         public string UrlSlug { get; set; } = string.Empty;
 
+        public string ImageFileSmall { get; set; } = string.Empty;
+
+        public string ImageFileSmallAlternateText { get; set; } = string.Empty;
+
+        public string ImageFileMedium { get; set; } = string.Empty;
+
+        public string ImageFileMediumAlternateText { get; set; } = string.Empty;
+
         public bool IsSearchable { get; set; } = true;
 
         public bool Featured { get; set; }
