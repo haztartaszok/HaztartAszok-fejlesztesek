@@ -13,14 +13,17 @@ namespace WinFormsApp1
         private const int BulkCardHeight = 380;
         private const int MinimumContentWidth = 760;
         private const int StatusLabelHeight = 36;
-        private const string CustomPropertyDeveloperId = "AszAdmin1.0";
+        private const string DefaultHotcakesCultureCode = "en-US";
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
         private readonly List<HotcakesCategorySnapshot> loadedCategories = [];
         private readonly List<HotcakesProductTypeSnapshot> loadedProductTypes = [];
+        private readonly List<HotcakesProductPropertySnapshot> loadedProductProperties = [];
         private readonly Dictionary<string, HotcakesProduct> loadedProductsBySku = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HotcakesProductTypeSnapshot> loadedProductTypesByBvinToken = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HotcakesProductTypeSnapshot> loadedProductTypesByNameToken = new(StringComparer.Ordinal);
         private readonly HashSet<string> ambiguousProductTypeNameTokens = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HotcakesProductPropertySnapshot> loadedProductPropertiesByNameToken = new(StringComparer.Ordinal);
+        private readonly HashSet<string> ambiguousProductPropertyNameTokens = new(StringComparer.Ordinal);
         private readonly HotcakesApiClient hotcakesClient;
         private readonly Label importStatusLabel = new();
         private bool isUpdatingSheetSelection;
@@ -104,12 +107,13 @@ namespace WinFormsApp1
 
             isInitializingHotcakes = true;
             UpdateActionStates();
-            SetStatusMessage("Hotcakes kategoriak betoltese...");
+            SetStatusMessage("Hotcakes kategoriak, termektipusok es tulajdonsagok betoltese...");
 
             try
             {
                 IReadOnlyList<HotcakesCategorySnapshot> categories = await hotcakesClient.GetCategoriesAsync();
                 IReadOnlyList<HotcakesProductTypeSnapshot> productTypes = [];
+                IReadOnlyList<HotcakesProductPropertySnapshot> productProperties = [];
 
                 loadedCategories.Clear();
                 loadedCategories.AddRange(categories
@@ -136,9 +140,33 @@ namespace WinFormsApp1
                     .OrderBy(productType => productType.ProductTypeName, StringComparer.CurrentCultureIgnoreCase));
                 RebuildProductTypeLookups();
 
+                try
+                {
+                    productProperties = await hotcakesClient.GetProductPropertiesAsync();
+                }
+                catch (Exception ex)
+                {
+                    productProperties = [];
+
+                    MessageBox.Show(
+                        this,
+                        $"A Hotcakes termektulajdonsagok betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A tulajdonsagimport csak akkor tud biztonsagosan meglevo property-khez kapcsolodni, ha ez a lista betoltheto.",
+                        "Hotcakes kapcsolat",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+
+                loadedProductProperties.Clear();
+                loadedProductProperties.AddRange(productProperties
+                    .OrderBy(productProperty => string.IsNullOrWhiteSpace(productProperty.DisplayName)
+                        ? productProperty.PropertyName
+                        : productProperty.DisplayName,
+                        StringComparer.CurrentCultureIgnoreCase));
+                RebuildProductPropertyLookups();
+
                 PopulateCategorySelectors();
                 hotcakesReady = true;
-                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus betoltve.");
+                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus, {loadedProductProperties.Count} termektulajdonsag betoltve.");
             }
             catch (Exception ex)
             {
@@ -234,6 +262,43 @@ namespace WinFormsApp1
             }
         }
 
+        private void RebuildProductPropertyLookups()
+        {
+            loadedProductPropertiesByNameToken.Clear();
+            ambiguousProductPropertyNameTokens.Clear();
+
+            foreach (HotcakesProductPropertySnapshot productProperty in loadedProductProperties)
+            {
+                RegisterProductPropertyLookupToken(productProperty.PropertyName, productProperty);
+                RegisterProductPropertyLookupToken(productProperty.DisplayName, productProperty);
+            }
+        }
+
+        private void RegisterProductPropertyLookupToken(string rawValue, HotcakesProductPropertySnapshot productProperty)
+        {
+            string normalizedValue = NormalizeToken(rawValue);
+
+            if (string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                return;
+            }
+
+            if (ambiguousProductPropertyNameTokens.Contains(normalizedValue))
+            {
+                return;
+            }
+
+            if (loadedProductPropertiesByNameToken.TryGetValue(normalizedValue, out HotcakesProductPropertySnapshot? existingProperty) &&
+                existingProperty.Id != productProperty.Id)
+            {
+                loadedProductPropertiesByNameToken.Remove(normalizedValue);
+                ambiguousProductPropertyNameTokens.Add(normalizedValue);
+                return;
+            }
+
+            loadedProductPropertiesByNameToken[normalizedValue] = productProperty;
+        }
+
         private bool TryResolveProductType(
             string rawValue,
             out HotcakesProductTypeSnapshot? productType,
@@ -278,6 +343,37 @@ namespace WinFormsApp1
                 : "Nincs ilyen nevvel vagy BVIN-nel Hotcakes termektipus.";
 
             return false;
+        }
+
+        private bool TryResolveExistingProductProperty(
+            string rawValue,
+            out HotcakesProductPropertySnapshot? productProperty,
+            out string? failureReason)
+        {
+            productProperty = null;
+            failureReason = null;
+
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                failureReason = "A megadott tulajdonsagnev ures.";
+                return false;
+            }
+
+            string normalizedValue = NormalizeToken(rawValue);
+
+            if (string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                failureReason = "A megadott tulajdonsagnev nem tartalmaz feloldhato karaktereket.";
+                return false;
+            }
+
+            if (ambiguousProductPropertyNameTokens.Contains(normalizedValue))
+            {
+                failureReason = $"A megadott tulajdonsagnev tobb Hotcakes property-re is illeszkedik: {rawValue}.";
+                return false;
+            }
+
+            return loadedProductPropertiesByNameToken.TryGetValue(normalizedValue, out productProperty);
         }
 
         private string ResolveProductTypeIdOrThrow(string rawValue, int rowNumber)
@@ -999,6 +1095,7 @@ namespace WinFormsApp1
             int productIssueCount = 0;
             StringBuilder detailsBuilder = new();
             HashSet<string> importedProductSkus = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> importedProductTypeValuesBySku = new(StringComparer.OrdinalIgnoreCase);
 
             if (productTable is not null)
             {
@@ -1056,6 +1153,7 @@ namespace WinFormsApp1
                     }
 
                     string rawProductType = GetCellValue(rowValues, productTypeColumnIndex);
+                    importedProductTypeValuesBySku[sku] = rawProductType;
 
                     if (!string.IsNullOrWhiteSpace(rawProductType) &&
                         !TryResolveProductType(rawProductType, out _, out string? productTypeFailureReason))
@@ -1148,8 +1246,8 @@ namespace WinFormsApp1
                 ? ValidateImageSheet(imageTable, importedProductSkus)
                 : new ImageSheetValidationResult(0, 0, 0, 0, true, string.Empty);
             PropertySheetValidationResult propertyValidation = includesProperties
-                ? ValidatePropertySheet(propertyTable, importedProductSkus)
-                : new PropertySheetValidationResult(0, 0, 0, true, string.Empty);
+                ? ValidatePropertySheet(propertyTable, importedProductSkus, importedProductTypeValuesBySku)
+                : new PropertySheetValidationResult(0, 0, 0, 0, true, string.Empty);
 
             if (!string.IsNullOrWhiteSpace(categoryValidation.DetailsMessage))
             {
@@ -1193,7 +1291,8 @@ namespace WinFormsApp1
                                   imageValidation.UnknownSkuCount +
                                   imageValidation.IncompleteRowCount +
                                   propertyValidation.UnknownSkuCount +
-                                  propertyValidation.IncompleteRowCount;
+                                  propertyValidation.IncompleteRowCount +
+                                  propertyValidation.InvalidPropertyCount;
 
             bool canProceed = includedRowCount > 0 &&
                               productCanProceed &&
@@ -1464,11 +1563,12 @@ namespace WinFormsApp1
 
         private PropertySheetValidationResult ValidatePropertySheet(
             WorksheetTable? propertyTable,
-            IReadOnlySet<string> importedProductSkus)
+            IReadOnlySet<string> importedProductSkus,
+            IReadOnlyDictionary<string, string> importedProductTypeValuesBySku)
         {
             if (propertyTable is null)
             {
-                return new PropertySheetValidationResult(0, 0, 0, true, string.Empty);
+                return new PropertySheetValidationResult(0, 0, 0, 0, true, string.Empty);
             }
 
             int skuColumnIndex = GetRequiredColumnIndex(propertyTable, "SKU");
@@ -1478,7 +1578,10 @@ namespace WinFormsApp1
             int rowCount = 0;
             int unknownSkuCount = 0;
             int incompleteRowCount = 0;
+            int invalidPropertyCount = 0;
             List<string> unknownSkuRows = [];
+            List<string> invalidPropertyRows = [];
+            HashSet<string> createablePropertyTokens = new(StringComparer.Ordinal);
 
             foreach ((int rowNumber, string[] rowValues) in propertyTable.Rows)
             {
@@ -1505,6 +1608,41 @@ namespace WinFormsApp1
                 {
                     unknownSkuCount++;
                     unknownSkuRows.Add($"{sku} (sor {rowNumber})");
+                    continue;
+                }
+
+                bool hasProductType = loadedProductsBySku.TryGetValue(sku, out HotcakesProduct? existingProduct) &&
+                                      !string.IsNullOrWhiteSpace(existingProduct.ProductTypeId);
+
+                if (!hasProductType &&
+                    importedProductTypeValuesBySku.TryGetValue(sku, out string? importedProductTypeValue) &&
+                    !string.IsNullOrWhiteSpace(importedProductTypeValue))
+                {
+                    hasProductType = true;
+                }
+
+                if (!hasProductType)
+                {
+                    invalidPropertyCount++;
+                    invalidPropertyRows.Add($"{sku} (sor {rowNumber}) -> a termekhez nincs feloldhato TermekTipus.");
+                    continue;
+                }
+
+                bool hasExistingProperty = TryResolveExistingProductProperty(
+                    propertyName,
+                    out _,
+                    out string? propertyFailureReason);
+
+                if (!string.IsNullOrWhiteSpace(propertyFailureReason))
+                {
+                    invalidPropertyCount++;
+                    invalidPropertyRows.Add($"{sku} (sor {rowNumber}) -> {propertyName} ({propertyFailureReason})");
+                    continue;
+                }
+
+                if (!hasExistingProperty)
+                {
+                    createablePropertyTokens.Add(NormalizeToken(propertyName));
                 }
             }
 
@@ -1513,19 +1651,28 @@ namespace WinFormsApp1
             detailsBuilder.AppendLine($"Tulajdonsagsorok: {rowCount}");
             detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
             detailsBuilder.AppendLine($"Hianyos tulajdonsagsorok: {incompleteRowCount}");
+            detailsBuilder.AppendLine($"Nem importalhato tulajdonsagsorok: {invalidPropertyCount}");
+            detailsBuilder.AppendLine($"Ujonnan letrehozhato Hotcakes property-k: {createablePropertyTokens.Count}");
 
             if (unknownSkuRows.Count > 0)
             {
                 detailsBuilder.AppendLine($"Nem feloldhato tulajdonsag SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
             }
 
+            if (invalidPropertyRows.Count > 0)
+            {
+                detailsBuilder.AppendLine($"Nem importalhato tulajdonsagsorok: {string.Join(", ", invalidPropertyRows.Take(5))}");
+            }
+
             bool canProceed = unknownSkuCount == 0 &&
-                              incompleteRowCount == 0;
+                              incompleteRowCount == 0 &&
+                              invalidPropertyCount == 0;
 
             return new PropertySheetValidationResult(
                 rowCount,
                 unknownSkuCount,
                 incompleteRowCount,
+                invalidPropertyCount,
                 canProceed,
                 detailsBuilder.ToString());
         }
@@ -2003,6 +2150,8 @@ namespace WinFormsApp1
             }
 
             int appliedCount = 0;
+            Dictionary<string, HashSet<long>> assignedPropertyIdsByProductType = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, int> nextSortOrdersByProductType = new(StringComparer.OrdinalIgnoreCase);
 
             foreach (IGrouping<string, PropertyImportRow> group in propertyRows
                          .GroupBy(static row => row.Sku, StringComparer.OrdinalIgnoreCase))
@@ -2020,12 +2169,65 @@ namespace WinFormsApp1
                         continue;
                     }
 
-                    ApplyImportedProperties(product, group);
-                    HotcakesProduct savedProduct = await hotcakesClient.UpdateProductAsync(product);
+                    if (string.IsNullOrWhiteSpace(product.ProductTypeId))
+                    {
+                        errors.Add($"A(z) {firstRow.RowNumber}. tulajdonsagsorhoz tartozo termeknek nincs Hotcakes ProductType-ja: {group.Key}.");
+                        continue;
+                    }
 
-                    loadedProductsBySku[group.Key] = savedProduct;
-                    resolvedProductsBySku[group.Key] = savedProduct;
-                    appliedCount += group.Count();
+                    if (!assignedPropertyIdsByProductType.TryGetValue(product.ProductTypeId, out HashSet<long>? assignedPropertyIds))
+                    {
+                        IReadOnlyList<HotcakesProductPropertySnapshot> assignedProperties =
+                            await hotcakesClient.GetProductPropertiesForProductAsync(product.Bvin);
+
+                        assignedPropertyIds = assignedProperties
+                            .Select(assignedProperty => assignedProperty.Id)
+                            .Where(static propertyId => propertyId > 0)
+                            .ToHashSet();
+
+                        assignedPropertyIdsByProductType[product.ProductTypeId] = assignedPropertyIds;
+                        nextSortOrdersByProductType[product.ProductTypeId] = Math.Max(1, assignedPropertyIds.Count + 1);
+                    }
+
+                    foreach (PropertyImportRow row in group)
+                    {
+                        HotcakesProductPropertySnapshot productProperty =
+                            await GetOrCreateProductPropertyAsync(row.PropertyName);
+
+                        if (!assignedPropertyIds.Contains(productProperty.Id))
+                        {
+                            int sortOrder = nextSortOrdersByProductType[product.ProductTypeId];
+                            bool linked = await hotcakesClient.AddPropertyToProductTypeAsync(
+                                product.ProductTypeId,
+                                productProperty.Id,
+                                sortOrder);
+
+                            if (!linked)
+                            {
+                                throw new InvalidOperationException(
+                                    $"A(z) '{productProperty.DisplayName}' tulajdonsag nem rendelheto a termek termektipusahoz.");
+                            }
+
+                            assignedPropertyIds.Add(productProperty.Id);
+                            nextSortOrdersByProductType[product.ProductTypeId] = sortOrder + 1;
+                        }
+
+                        bool saved = await hotcakesClient.SetProductPropertyValueAsync(
+                            productProperty.Id,
+                            product.Bvin,
+                            row.PropertyValue);
+
+                        if (!saved)
+                        {
+                            throw new InvalidOperationException(
+                                $"A(z) '{productProperty.DisplayName}' tulajdonsagertek nem mentheto a Hotcakes-ben.");
+                        }
+
+                        appliedCount++;
+                    }
+
+                    loadedProductsBySku[group.Key] = product;
+                    resolvedProductsBySku[group.Key] = product;
                 }
                 catch (Exception ex)
                 {
@@ -2034,6 +2236,46 @@ namespace WinFormsApp1
             }
 
             return appliedCount;
+        }
+
+        private async Task<HotcakesProductPropertySnapshot> GetOrCreateProductPropertyAsync(string propertyName)
+        {
+            bool hasExistingProperty = TryResolveExistingProductProperty(
+                propertyName,
+                out HotcakesProductPropertySnapshot? existingProperty,
+                out string? failureReason);
+
+            if (!string.IsNullOrWhiteSpace(failureReason))
+            {
+                throw new InvalidOperationException(failureReason);
+            }
+
+            if (hasExistingProperty && existingProperty is not null)
+            {
+                return existingProperty;
+            }
+
+            string trimmedPropertyName = propertyName.Trim();
+            HotcakesProductPropertySnapshot createdProperty = await hotcakesClient.CreateProductPropertyAsync(new HotcakesProductPropertySnapshot
+            {
+                PropertyName = trimmedPropertyName,
+                DisplayName = trimmedPropertyName,
+                DisplayOnSite = true,
+                DisplayToDropShipper = false,
+                TypeCode = HotcakesProductPropertyTypes.TextField,
+                DefaultValue = string.Empty,
+                CultureCode = DefaultHotcakesCultureCode
+            });
+
+            if (createdProperty.Id <= 0)
+            {
+                throw new InvalidOperationException($"A(z) '{trimmedPropertyName}' Hotcakes tulajdonsag letrehozasa nem adott vissza ervenyes azonosito.");
+            }
+
+            loadedProductProperties.Add(createdProperty);
+            RebuildProductPropertyLookups();
+
+            return createdProperty;
         }
 
         private async Task<HotcakesProduct?> ResolveProductBySkuAsync(
@@ -2062,34 +2304,6 @@ namespace WinFormsApp1
             }
 
             return fetchedProduct;
-        }
-
-        private static void ApplyImportedProperties(
-            HotcakesProduct product,
-            IEnumerable<PropertyImportRow> propertyRows)
-        {
-            product.CustomProperties ??= [];
-
-            foreach (PropertyImportRow row in propertyRows)
-            {
-                HotcakesCustomProperty? existingProperty = product.CustomProperties.FirstOrDefault(
-                    property => string.Equals(property.DeveloperId, CustomPropertyDeveloperId, StringComparison.OrdinalIgnoreCase) &&
-                                string.Equals(property.Key, row.PropertyName, StringComparison.OrdinalIgnoreCase));
-
-                if (existingProperty is null)
-                {
-                    product.CustomProperties.Add(new HotcakesCustomProperty
-                    {
-                        DeveloperId = CustomPropertyDeveloperId,
-                        Key = row.PropertyName,
-                        Value = row.PropertyValue
-                    });
-                }
-                else
-                {
-                    existingProperty.Value = row.PropertyValue;
-                }
-            }
         }
 
         private static bool TryResolveImageFilePath(
@@ -3272,6 +3486,7 @@ namespace WinFormsApp1
             int RowCount,
             int UnknownSkuCount,
             int IncompleteRowCount,
+            int InvalidPropertyCount,
             bool CanProceed,
             string DetailsMessage);
 

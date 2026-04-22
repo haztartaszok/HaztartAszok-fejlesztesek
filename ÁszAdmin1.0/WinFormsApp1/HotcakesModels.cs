@@ -66,6 +66,56 @@ namespace WinFormsApp1
         public Dictionary<string, JsonElement>? AdditionalData { get; set; }
     }
 
+    internal sealed class HotcakesProductPropertySnapshot
+    {
+        public long Id { get; set; }
+
+        public long StoreId { get; set; }
+
+        public string PropertyName { get; set; } = string.Empty;
+
+        public string DisplayName { get; set; } = string.Empty;
+
+        public bool DisplayOnSite { get; set; }
+
+        public bool DisplayToDropShipper { get; set; }
+
+        public int TypeCode { get; set; } = HotcakesProductPropertyTypes.TextField;
+
+        public string DefaultValue { get; set; } = string.Empty;
+
+        public string CultureCode { get; set; } = string.Empty;
+
+        public List<HotcakesProductPropertyChoiceSnapshot> Choices { get; set; } = [];
+
+        [JsonConverter(typeof(HotcakesDateTimeConverter))]
+        public DateTime LastUpdatedUtc { get; set; }
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+    }
+
+    internal sealed class HotcakesProductPropertyChoiceSnapshot
+    {
+        public long Id { get; set; }
+
+        public long StoreId { get; set; }
+
+        public long PropertyId { get; set; }
+
+        public string ChoiceName { get; set; } = string.Empty;
+
+        public string DisplayName { get; set; } = string.Empty;
+
+        public int SortOrder { get; set; }
+
+        [JsonConverter(typeof(HotcakesDateTimeConverter))]
+        public DateTime LastUpdated { get; set; }
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+    }
+
     internal sealed class HotcakesProduct
     {
         public string Bvin { get; set; } = string.Empty;
@@ -176,6 +226,16 @@ namespace WinFormsApp1
         public const int Disabled = 0;
         public const int Active = 1;
         public const int NotSet = -1;
+    }
+
+    internal static class HotcakesProductPropertyTypes
+    {
+        public const int None = 0;
+        public const int TextField = 1;
+        public const int MultipleChoiceField = 2;
+        public const int CurrencyField = 3;
+        public const int DateField = 4;
+        public const int HyperLink = 7;
     }
 
     internal sealed class HotcakesDateTimeConverter : JsonConverter<DateTime>
