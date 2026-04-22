@@ -16,7 +16,11 @@ namespace WinFormsApp1
         private const string CustomPropertyDeveloperId = "AszAdmin1.0";
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
         private readonly List<HotcakesCategorySnapshot> loadedCategories = [];
+        private readonly List<HotcakesProductTypeSnapshot> loadedProductTypes = [];
         private readonly Dictionary<string, HotcakesProduct> loadedProductsBySku = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, HotcakesProductTypeSnapshot> loadedProductTypesByBvinToken = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HotcakesProductTypeSnapshot> loadedProductTypesByNameToken = new(StringComparer.Ordinal);
+        private readonly HashSet<string> ambiguousProductTypeNameTokens = new(StringComparer.Ordinal);
         private readonly HotcakesApiClient hotcakesClient;
         private readonly Label importStatusLabel = new();
         private bool isUpdatingSheetSelection;
@@ -105,14 +109,36 @@ namespace WinFormsApp1
             try
             {
                 IReadOnlyList<HotcakesCategorySnapshot> categories = await hotcakesClient.GetCategoriesAsync();
+                IReadOnlyList<HotcakesProductTypeSnapshot> productTypes = [];
 
                 loadedCategories.Clear();
                 loadedCategories.AddRange(categories
                     .OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase));
 
+                try
+                {
+                    productTypes = await hotcakesClient.GetProductTypesAsync();
+                }
+                catch (Exception ex)
+                {
+                    productTypes = [];
+
+                    MessageBox.Show(
+                        this,
+                        $"A Hotcakes termektipusok betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A tovabbi import akkor tud TermekTipus mezot kezelni, ha ez a lista betoltheto.",
+                        "Hotcakes kapcsolat",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+
+                loadedProductTypes.Clear();
+                loadedProductTypes.AddRange(productTypes
+                    .OrderBy(productType => productType.ProductTypeName, StringComparer.CurrentCultureIgnoreCase));
+                RebuildProductTypeLookups();
+
                 PopulateCategorySelectors();
                 hotcakesReady = true;
-                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria betoltve.");
+                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus betoltve.");
             }
             catch (Exception ex)
             {
@@ -167,6 +193,107 @@ namespace WinFormsApp1
             {
                 comboBox.EndUpdate();
             }
+        }
+
+        private void RebuildProductTypeLookups()
+        {
+            loadedProductTypesByBvinToken.Clear();
+            loadedProductTypesByNameToken.Clear();
+            ambiguousProductTypeNameTokens.Clear();
+
+            foreach (HotcakesProductTypeSnapshot productType in loadedProductTypes)
+            {
+                string normalizedBvin = NormalizeToken(productType.Bvin);
+
+                if (!string.IsNullOrWhiteSpace(normalizedBvin))
+                {
+                    loadedProductTypesByBvinToken[normalizedBvin] = productType;
+                }
+
+                string normalizedName = NormalizeToken(productType.ProductTypeName);
+
+                if (string.IsNullOrWhiteSpace(normalizedName))
+                {
+                    continue;
+                }
+
+                if (ambiguousProductTypeNameTokens.Contains(normalizedName))
+                {
+                    continue;
+                }
+
+                if (loadedProductTypesByNameToken.TryGetValue(normalizedName, out HotcakesProductTypeSnapshot? existingProductType) &&
+                    !string.Equals(existingProductType.Bvin, productType.Bvin, StringComparison.OrdinalIgnoreCase))
+                {
+                    loadedProductTypesByNameToken.Remove(normalizedName);
+                    ambiguousProductTypeNameTokens.Add(normalizedName);
+                    continue;
+                }
+
+                loadedProductTypesByNameToken[normalizedName] = productType;
+            }
+        }
+
+        private bool TryResolveProductType(
+            string rawValue,
+            out HotcakesProductTypeSnapshot? productType,
+            out string? failureReason)
+        {
+            productType = null;
+            failureReason = null;
+
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return true;
+            }
+
+            string normalizedValue = NormalizeToken(rawValue);
+
+            if (string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                failureReason = "A megadott TermekTipus ertek nem tartalmaz feloldhato karaktereket.";
+                return false;
+            }
+
+            if (loadedProductTypesByBvinToken.TryGetValue(normalizedValue, out HotcakesProductTypeSnapshot? productTypeByBvin))
+            {
+                productType = productTypeByBvin;
+                return true;
+            }
+
+            if (ambiguousProductTypeNameTokens.Contains(normalizedValue))
+            {
+                failureReason = "A megadott TermekTipus tobb Hotcakes termektipusra is illeszkedik, ezert nem egyertelmu.";
+                return false;
+            }
+
+            if (loadedProductTypesByNameToken.TryGetValue(normalizedValue, out HotcakesProductTypeSnapshot? productTypeByName))
+            {
+                productType = productTypeByName;
+                return true;
+            }
+
+            failureReason = loadedProductTypes.Count == 0
+                ? "A Hotcakes termektipus lista nem erheto el."
+                : "Nincs ilyen nevvel vagy BVIN-nel Hotcakes termektipus.";
+
+            return false;
+        }
+
+        private string ResolveProductTypeIdOrThrow(string rawValue, int rowNumber)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return string.Empty;
+            }
+
+            if (TryResolveProductType(rawValue, out HotcakesProductTypeSnapshot? productType, out string? failureReason))
+            {
+                return productType?.Bvin ?? string.Empty;
+            }
+
+            throw new InvalidOperationException(
+                $"A(z) {rowNumber}. sor TermekTipus mezoje nem oldhato fel: '{rawValue}'. {failureReason}");
         }
 
         private void UpdateActionStates()
@@ -879,7 +1006,7 @@ namespace WinFormsApp1
                 int nameColumnIndex = GetOptionalColumnIndex(productTable, "Nev", "Name");
                 int priceColumnIndex = GetOptionalColumnIndex(productTable, "Ar", "Price");
                 int stockColumnIndex = GetOptionalColumnIndex(productTable, "Keszlet", "Inventory", "Stock");
-                int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType");
+                int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType", "ProductTypeName");
 
                 HashSet<string> seenSkus = new(StringComparer.OrdinalIgnoreCase);
                 HashSet<string> duplicateSkus = new(StringComparer.OrdinalIgnoreCase);
@@ -887,11 +1014,12 @@ namespace WinFormsApp1
                 int missingNameForNewProductCount = 0;
                 int invalidPriceCount = 0;
                 int invalidStockCount = 0;
-                int ignoredProductTypeCount = 0;
+                int unresolvedProductTypeCount = 0;
 
                 List<string> missingNameSkus = [];
                 List<string> invalidPriceRows = [];
                 List<string> invalidStockRows = [];
+                List<string> unresolvedProductTypeRows = [];
 
                 foreach ((int rowNumber, string[] rowValues) in productTable.Rows)
                 {
@@ -927,9 +1055,13 @@ namespace WinFormsApp1
                         invalidStockRows.Add($"{sku} (sor {rowNumber})");
                     }
 
-                    if (!string.IsNullOrWhiteSpace(GetCellValue(rowValues, productTypeColumnIndex)))
+                    string rawProductType = GetCellValue(rowValues, productTypeColumnIndex);
+
+                    if (!string.IsNullOrWhiteSpace(rawProductType) &&
+                        !TryResolveProductType(rawProductType, out _, out string? productTypeFailureReason))
                     {
-                        ignoredProductTypeCount++;
+                        unresolvedProductTypeCount++;
+                        unresolvedProductTypeRows.Add($"{sku} (sor {rowNumber}) -> {rawProductType} ({productTypeFailureReason})");
                     }
 
                     if (loadedProductsBySku.ContainsKey(sku))
@@ -958,6 +1090,7 @@ namespace WinFormsApp1
                                     missingNameForNewProductCount +
                                     invalidPriceCount +
                                     invalidStockCount +
+                                    unresolvedProductTypeCount +
                                     existingSkuConflictCount;
                 productCanProceed = productTable.Rows.Count > 0 && productIssueCount == 0;
 
@@ -970,7 +1103,7 @@ namespace WinFormsApp1
                 detailsBuilder.AppendLine($"Uj termeknel hianyzo Nev mezok: {missingNameForNewProductCount}");
                 detailsBuilder.AppendLine($"Hibas Ar mezok: {invalidPriceCount}");
                 detailsBuilder.AppendLine($"Hibas Keszlet mezok: {invalidStockCount}");
-                detailsBuilder.AppendLine($"Nem feldolgozott TermekTipus ertekek: {ignoredProductTypeCount}");
+                detailsBuilder.AppendLine($"Nem feloldhato TermekTipus ertekek: {unresolvedProductTypeCount}");
 
                 if (existingSkuConflictCount > 0)
                 {
@@ -997,9 +1130,9 @@ namespace WinFormsApp1
                     detailsBuilder.AppendLine($"Hibas Keszlet mezok: {string.Join(", ", invalidStockRows.Take(5))}");
                 }
 
-                if (ignoredProductTypeCount > 0)
+                if (unresolvedProductTypeRows.Count > 0)
                 {
-                    detailsBuilder.AppendLine("A TermekTipus oszlop jelenleg meg nem kerul ProductTypeId-ra lekepzesre, az ertekei import kozben kihagyasra kerulnek.");
+                    detailsBuilder.AppendLine($"Nem feloldhato TermekTipus sorok: {string.Join(", ", unresolvedProductTypeRows.Take(5))}");
                 }
 
                 if (existingSkuConflictCount > 0)
@@ -1490,6 +1623,7 @@ namespace WinFormsApp1
             int imageUploadedCount = 0;
             int mainImageUploadedCount = 0;
             int additionalImageUploadedCount = 0;
+            int productTypeAppliedCount = 0;
             int propertyAppliedCount = 0;
 
             for (int index = 0; index < productRows.Count; index++)
@@ -1499,6 +1633,8 @@ namespace WinFormsApp1
 
                 try
                 {
+                    string resolvedProductTypeId = ResolveProductTypeIdOrThrow(row.ProductTypeName, row.RowNumber);
+
                     if (loadedProductsBySku.TryGetValue(row.Sku, out HotcakesProduct? existingProduct))
                     {
                         if (existingProductMode == ExistingProductImportMode.SkipExisting)
@@ -1522,7 +1658,7 @@ namespace WinFormsApp1
                             continue;
                         }
 
-                        ApplyImportedProductValues(currentProduct, row, isNewProduct: false);
+                        ApplyImportedProductValues(currentProduct, row, isNewProduct: false, resolvedProductTypeId);
                         HotcakesProduct savedProduct = await hotcakesClient.UpdateProductAsync(currentProduct);
 
                         if (row.Stock.HasValue)
@@ -1532,11 +1668,17 @@ namespace WinFormsApp1
 
                         loadedProductsBySku[row.Sku] = savedProduct;
                         resolvedProductsBySku[row.Sku] = savedProduct;
+
+                        if (!string.IsNullOrWhiteSpace(resolvedProductTypeId))
+                        {
+                            productTypeAppliedCount++;
+                        }
+
                         updatedCount++;
                     }
                     else
                     {
-                        HotcakesProduct newProduct = BuildImportedProduct(row);
+                        HotcakesProduct newProduct = BuildImportedProduct(row, resolvedProductTypeId);
                         HotcakesProduct savedProduct = await hotcakesClient.CreateProductAsync(newProduct);
 
                         if (row.Stock.HasValue)
@@ -1546,6 +1688,12 @@ namespace WinFormsApp1
 
                         loadedProductsBySku[row.Sku] = savedProduct;
                         resolvedProductsBySku[row.Sku] = savedProduct;
+
+                        if (!string.IsNullOrWhiteSpace(resolvedProductTypeId))
+                        {
+                            productTypeAppliedCount++;
+                        }
+
                         createdCount++;
                     }
                 }
@@ -1576,6 +1724,7 @@ namespace WinFormsApp1
             detailsBuilder.AppendLine($"Letrehozott termekek: {createdCount}");
             detailsBuilder.AppendLine($"Frissitett termekek: {updatedCount}");
             detailsBuilder.AppendLine($"Kihagyott meglevo termekek: {skippedExistingCount}");
+            detailsBuilder.AppendLine($"Beallitott termektipusok: {productTypeAppliedCount}");
             detailsBuilder.AppendLine($"Letrehozott kategoriakapcsolatok: {categoryLinkedCount}");
             detailsBuilder.AppendLine($"Mar letezo vagy duplikalt kategoriakapcsolatok: {categoryAlreadyLinkedCount}");
             detailsBuilder.AppendLine($"Feltoltott kepek: {imageUploadedCount} ({mainImageUploadedCount} fokep, {additionalImageUploadedCount} tovabbi kep)");
@@ -1591,12 +1740,6 @@ namespace WinFormsApp1
                 {
                     detailsBuilder.AppendLine($"- {error}");
                 }
-            }
-
-            if (productRows.Any(static row => !string.IsNullOrWhiteSpace(row.ProductTypeName)))
-            {
-                detailsBuilder.AppendLine();
-                detailsBuilder.AppendLine("Megjegyzes: a TermekTipus oszlop jelenleg nincs ProductTypeId-ra lekotve, ezert az ertekei most nem kerultek feltoltesre.");
             }
 
             List<string> statusParts = [];
@@ -2026,12 +2169,13 @@ namespace WinFormsApp1
             return !string.IsNullOrWhiteSpace(imagePath) ? imagePath : imageName;
         }
 
-        private static HotcakesProduct BuildImportedProduct(ProductImportRow row)
+        private static HotcakesProduct BuildImportedProduct(ProductImportRow row, string productTypeId)
         {
             HotcakesProduct product = new()
             {
                 Sku = row.Sku,
                 ProductName = row.Name,
+                ProductTypeId = productTypeId,
                 ListPrice = row.Price ?? 0m,
                 SitePrice = row.Price ?? 0m,
                 LongDescription = row.Description,
@@ -2048,11 +2192,20 @@ namespace WinFormsApp1
             return product;
         }
 
-        private static void ApplyImportedProductValues(HotcakesProduct product, ProductImportRow row, bool isNewProduct)
+        private static void ApplyImportedProductValues(
+            HotcakesProduct product,
+            ProductImportRow row,
+            bool isNewProduct,
+            string productTypeId)
         {
             if (isNewProduct || !string.IsNullOrWhiteSpace(row.Name))
             {
                 product.ProductName = row.Name;
+            }
+
+            if (!string.IsNullOrWhiteSpace(productTypeId))
+            {
+                product.ProductTypeId = productTypeId;
             }
 
             if (row.Price.HasValue)
@@ -2105,7 +2258,7 @@ namespace WinFormsApp1
             int nameColumnIndex = GetOptionalColumnIndex(productTable, "Nev", "Name");
             int priceColumnIndex = GetOptionalColumnIndex(productTable, "Ar", "Price");
             int stockColumnIndex = GetOptionalColumnIndex(productTable, "Keszlet", "Inventory", "Stock");
-            int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType");
+            int productTypeColumnIndex = GetOptionalColumnIndex(productTable, "TermekTipus", "ProductType", "ProductTypeName");
             int descriptionColumnIndex = GetOptionalColumnIndex(productTable, "Leiras", "Description", "LongDescription");
 
             List<ProductImportRow> rows = [];

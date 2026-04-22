@@ -52,6 +52,20 @@ namespace WinFormsApp1
         public int TotalProductCount { get; init; }
     }
 
+    internal sealed class HotcakesProductTypeSnapshot
+    {
+        public string Bvin { get; set; } = string.Empty;
+
+        public string ProductTypeName { get; set; } = string.Empty;
+
+        public string TemplateName { get; set; } = string.Empty;
+
+        public bool IsPermanent { get; set; }
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+    }
+
     internal sealed class HotcakesProduct
     {
         public string Bvin { get; set; } = string.Empty;

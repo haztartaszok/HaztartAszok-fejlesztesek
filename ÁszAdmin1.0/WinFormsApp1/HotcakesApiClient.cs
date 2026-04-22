@@ -64,6 +64,17 @@ namespace WinFormsApp1
             return response.Content ?? [];
         }
 
+        public async Task<IReadOnlyList<HotcakesProductTypeSnapshot>> GetProductTypesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            HotcakesApiResponse<List<HotcakesProductTypeSnapshot>> response = await GetAsync<List<HotcakesProductTypeSnapshot>>(
+                "producttypes/",
+                null,
+                cancellationToken);
+
+            return response.Content ?? [];
+        }
+
         public Task<HotcakesProductPage> GetProductsPageAsync(
             int pageNumber,
             int pageSize,
