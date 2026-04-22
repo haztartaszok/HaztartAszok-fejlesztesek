@@ -24,6 +24,7 @@ using System.Linq;
 using System.Web.Mvc;
 using Hotcakes.Commerce;
 using Hotcakes.Commerce.Orders;
+using Dnn.ShoppedTogetherHaztartAszok.Services;
 
 namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Controllers
 {
@@ -103,6 +104,11 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
             return Content("Sync lefutott");
         }
 
+        public ActionResult AdminStats()
+        {
+            return Content("ADMINSTATS ACTION FUT");
+        }
+
         public ActionResult Index()
         {
             var runSync = Request.QueryString["runSync"];
@@ -163,7 +169,19 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
             ViewBag.RecommendedProducts = recommendedProducts;
 
             var model = new List<Item>();
+
+            // csak admin oldalon jelenjen meg a stat
+            if (PortalSettings.ActiveTab.TabName == "Admin Statisztika")
+            {
+                var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
+                var repo = new StatisticsRepository(connString);
+                var products = repo.GetProducts();
+
+                return View("AdminStats", products);
+            }
+
             return View(model);
         }
     }
 }
+

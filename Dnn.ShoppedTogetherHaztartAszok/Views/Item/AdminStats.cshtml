@@ -1,0 +1,13 @@
+@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<IEnumerable<ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models.ProductItem>>
+@using System.Linq
+@using DotNetNuke.Web.Mvc.Helpers
+@using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models
+
+<h2>Admin statisztika – terméklista</h2>
+
+<ul>
+    @foreach (var p in Model)
+    {
+        <li>@p.Id - @p.ProductName</li>
+    }
+</ul>

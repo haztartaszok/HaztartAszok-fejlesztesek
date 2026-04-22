@@ -33,15 +33,17 @@
 @if (recommendedProducts != null && recommendedProducts.Count > 0)
 {
     <div class="recommended-products-wrapper">
-        <h3>Ezeket szokták még vásárolni</h3>
+        <div class="recommended-products-inner">
+            <h3>Ezeket szokták még vásárolni</h3>
 
-        <div class="spc-grid hc-product-grid">
-            @foreach (var product in recommendedProducts)
-            {
-                <div class="spc-card hc-product-card">
-                    @Html.Partial("_RenderRecommendedProduct", product)
-                </div>
-            }
+            <div class="spc-grid hc-product-grid">
+                @foreach (var product in recommendedProducts)
+                {
+                    <div class="spc-card hc-product-card">
+                        @Html.Partial("_RenderRecommendedProduct", product)
+                    </div>
+                }
+            </div>
         </div>
     </div>
 }
