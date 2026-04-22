@@ -1242,6 +1242,7 @@ namespace WinFormsApp1
 
             List<string> missingFileRows = [];
             List<string> unknownSkuRows = [];
+            Dictionary<string, int> uploadableImageRowCountsBySku = new(StringComparer.OrdinalIgnoreCase);
 
             foreach ((int rowNumber, string[] rowValues) in imageTable.Rows)
             {
@@ -1280,15 +1281,25 @@ namespace WinFormsApp1
                 {
                     missingFileCount++;
                     missingFileRows.Add($"{sku} (sor {rowNumber}) -> {resolvedPath}");
+                    continue;
                 }
+
+                uploadableImageRowCountsBySku[sku] = uploadableImageRowCountsBySku.TryGetValue(sku, out int existingCount)
+                    ? existingCount + 1
+                    : 1;
             }
 
+            int uploadableMainImageCount = uploadableImageRowCountsBySku.Count;
+            int uploadableAdditionalImageCount = uploadableImageRowCountsBySku.Values.Sum(static count => Math.Max(0, count - 1));
+            int multiImageSkuCount = uploadableImageRowCountsBySku.Values.Count(static count => count > 1);
             StringBuilder detailsBuilder = new();
             detailsBuilder.AppendLine($"Kepek munkalap: {imageTable.Name}");
             detailsBuilder.AppendLine($"Kepsorok: {rowCount}");
             detailsBuilder.AppendLine($"Hianyzo vagy nem feloldhato kepfajlok: {missingFileCount}");
             detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
             detailsBuilder.AppendLine($"Hianyos kepsorok: {incompleteRowCount}");
+            detailsBuilder.AppendLine($"Tobb kepet kapo SKU-k: {multiImageSkuCount}");
+            detailsBuilder.AppendLine($"Feltoltheto kepek bontasa: {uploadableMainImageCount} fokep, {uploadableAdditionalImageCount} tovabbi kep");
 
             if (missingFileRows.Count > 0)
             {
@@ -1298,6 +1309,11 @@ namespace WinFormsApp1
             if (unknownSkuRows.Count > 0)
             {
                 detailsBuilder.AppendLine($"Nem feloldhato kep SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
+            }
+
+            if (rowCount > 0)
+            {
+                detailsBuilder.AppendLine("SKU-nkent az elso sikeresen feloldott kep fokepkent, a tobbi tovabbi kepkent kerul feltoltesre.");
             }
 
             bool canProceed = missingFileCount == 0 &&
@@ -1472,6 +1488,8 @@ namespace WinFormsApp1
             int categoryLinkedCount = 0;
             int categoryAlreadyLinkedCount = 0;
             int imageUploadedCount = 0;
+            int mainImageUploadedCount = 0;
+            int additionalImageUploadedCount = 0;
             int propertyAppliedCount = 0;
 
             for (int index = 0; index < productRows.Count; index++)
@@ -1544,7 +1562,8 @@ namespace WinFormsApp1
 
             if (imageRows.Count > 0)
             {
-                imageUploadedCount = await ImportImageRowsAsync(imageRows, resolvedProductsBySku, errors);
+                (imageUploadedCount, mainImageUploadedCount, additionalImageUploadedCount) =
+                    await ImportImageRowsAsync(imageRows, resolvedProductsBySku, errors);
             }
 
             if (propertyRows.Count > 0)
@@ -1559,7 +1578,7 @@ namespace WinFormsApp1
             detailsBuilder.AppendLine($"Kihagyott meglevo termekek: {skippedExistingCount}");
             detailsBuilder.AppendLine($"Letrehozott kategoriakapcsolatok: {categoryLinkedCount}");
             detailsBuilder.AppendLine($"Mar letezo vagy duplikalt kategoriakapcsolatok: {categoryAlreadyLinkedCount}");
-            detailsBuilder.AppendLine($"Feltoltott kepek: {imageUploadedCount}");
+            detailsBuilder.AppendLine($"Feltoltott kepek: {imageUploadedCount} ({mainImageUploadedCount} fokep, {additionalImageUploadedCount} tovabbi kep)");
             detailsBuilder.AppendLine($"Beallitott tulajdonsagok: {propertyAppliedCount}");
             detailsBuilder.AppendLine($"Import hibak: {errors.Count}");
 
@@ -1713,23 +1732,28 @@ namespace WinFormsApp1
             return (linkedCount, alreadyLinkedCount);
         }
 
-        private async Task<int> ImportImageRowsAsync(
+        private async Task<(int UploadedCount, int MainImageCount, int AdditionalImageCount)> ImportImageRowsAsync(
             IReadOnlyList<ImageImportRow> imageRows,
             IDictionary<string, HotcakesProduct> resolvedProductsBySku,
             List<string> errors)
         {
             if (imageRows.Count == 0)
             {
-                return 0;
+                return (0, 0, 0);
             }
 
             string workbookFilePath = GetCurrentWorkbookFilePath();
             int uploadedCount = 0;
+            int mainImageCount = 0;
+            int additionalImageCount = 0;
+            Dictionary<string, int> successfulImageUploadCountsBySku = new(StringComparer.OrdinalIgnoreCase);
 
             for (int index = 0; index < imageRows.Count; index++)
             {
                 ImageImportRow row = imageRows[index];
-                SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count})");
+                bool uploadAsMainImage = !successfulImageUploadCountsBySku.ContainsKey(row.Sku);
+                string uploadTypeLabel = uploadAsMainImage ? "fokep" : "tovabbi kep";
+                SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count}) - {uploadTypeLabel}");
 
                 try
                 {
@@ -1755,15 +1779,30 @@ namespace WinFormsApp1
 
                     byte[] fileContent = await File.ReadAllBytesAsync(resolvedPath);
                     string uploadFileName = Path.GetFileName(resolvedPath);
-                    bool uploaded = await hotcakesClient.UploadProductMainImageAsync(product.Bvin, uploadFileName, fileContent);
+                    bool uploaded = uploadAsMainImage
+                        ? await hotcakesClient.UploadProductMainImageAsync(product.Bvin, uploadFileName, fileContent)
+                        : await hotcakesClient.UploadProductAdditionalImageAsync(product.Bvin, uploadFileName, fileContent);
 
                     if (!uploaded)
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kepsor feltoltese sikertelen volt ({row.Sku}): {uploadFileName}.");
+                        errors.Add($"A(z) {row.RowNumber}. kepsor {uploadTypeLabel} feltoltese sikertelen volt ({row.Sku}): {uploadFileName}.");
                         continue;
                     }
 
+                    successfulImageUploadCountsBySku[row.Sku] = successfulImageUploadCountsBySku.TryGetValue(row.Sku, out int currentCount)
+                        ? currentCount + 1
+                        : 1;
+
                     uploadedCount++;
+
+                    if (uploadAsMainImage)
+                    {
+                        mainImageCount++;
+                    }
+                    else
+                    {
+                        additionalImageCount++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1771,7 +1810,7 @@ namespace WinFormsApp1
                 }
             }
 
-            return uploadedCount;
+            return (uploadedCount, mainImageCount, additionalImageCount);
         }
 
         private async Task<int> ImportPropertyRowsAsync(
