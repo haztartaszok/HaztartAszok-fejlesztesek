@@ -215,7 +215,7 @@ namespace WinFormsApp1
             existingItemModeComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             existingItemModeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             existingItemModeComboBox.FormattingEnabled = true;
-            existingItemModeComboBox.Items.AddRange(new object[] { "Frissites SKU alapjan", "Kihagyas", "Uj termekkent hozzaadas" });
+            existingItemModeComboBox.Items.AddRange(new object[] { "Frissites SKU alapjan", "Kihagyas" });
             existingItemModeComboBox.Location = new Point(548, 55);
             existingItemModeComboBox.Margin = new Padding(4);
             existingItemModeComboBox.Name = "existingItemModeComboBox";

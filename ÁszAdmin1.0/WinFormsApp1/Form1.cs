@@ -1178,18 +1178,13 @@ namespace WinFormsApp1
                     }
                 }
 
-                int existingSkuConflictCount = GetExistingProductImportMode() == ExistingProductImportMode.RejectExisting
-                    ? existingProductCount
-                    : 0;
-
                 productRowCount = productTable.Rows.Count;
                 productIssueCount = missingSkuCount +
                                     duplicateSkus.Count +
                                     missingNameForNewProductCount +
                                     invalidPriceCount +
                                     invalidStockCount +
-                                    unresolvedProductTypeCount +
-                                    existingSkuConflictCount;
+                                    unresolvedProductTypeCount;
                 productCanProceed = productTable.Rows.Count > 0 && productIssueCount == 0;
 
                 detailsBuilder.AppendLine($"Termek munkalap: {productTable.Name}");
@@ -1202,11 +1197,6 @@ namespace WinFormsApp1
                 detailsBuilder.AppendLine($"Hibas Ar mezok: {invalidPriceCount}");
                 detailsBuilder.AppendLine($"Hibas Keszlet mezok: {invalidStockCount}");
                 detailsBuilder.AppendLine($"Nem feloldhato TermekTipus ertekek: {unresolvedProductTypeCount}");
-
-                if (existingSkuConflictCount > 0)
-                {
-                    detailsBuilder.AppendLine($"'Uj termekkent hozzaadas' modban utkozo meglevo SKU-k: {existingSkuConflictCount}");
-                }
 
                 if (duplicateSkus.Count > 0)
                 {
@@ -1233,10 +1223,6 @@ namespace WinFormsApp1
                     detailsBuilder.AppendLine($"Nem feloldhato TermekTipus sorok: {string.Join(", ", unresolvedProductTypeRows.Take(5))}");
                 }
 
-                if (existingSkuConflictCount > 0)
-                {
-                    detailsBuilder.AppendLine("A 'Uj termekkent hozzaadas' mod SKU-alapu importnal nem tamogatott a meglevo termekekre.");
-                }
             }
 
             CategorySheetValidationResult categoryValidation = includesCategories
@@ -1788,12 +1774,6 @@ namespace WinFormsApp1
                         {
                             skippedExistingCount++;
                             resolvedProductsBySku[row.Sku] = existingProduct;
-                            continue;
-                        }
-
-                        if (existingProductMode == ExistingProductImportMode.RejectExisting)
-                        {
-                            errors.Add($"A(z) {row.RowNumber}. sor SKU-ja mar letezik a Hotcakes-ben: {row.Sku}.");
                             continue;
                         }
 
@@ -2653,11 +2633,6 @@ namespace WinFormsApp1
                 return ExistingProductImportMode.SkipExisting;
             }
 
-            if (selectedMode.Contains("UJTERMEKKENTHOZZAADAS", StringComparison.Ordinal))
-            {
-                return ExistingProductImportMode.RejectExisting;
-            }
-
             return ExistingProductImportMode.UpdateBySku;
         }
 
@@ -3493,8 +3468,7 @@ namespace WinFormsApp1
         private enum ExistingProductImportMode
         {
             UpdateBySku,
-            SkipExisting,
-            RejectExisting
+            SkipExisting
         }
 
         private enum ImportScope
