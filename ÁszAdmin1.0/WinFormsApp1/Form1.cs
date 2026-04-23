@@ -12,6 +12,9 @@ namespace WinFormsApp1
         private const int CardSpacing = 16;
         private const int BulkCardHeight = 380;
         private const int MinimumContentWidth = 760;
+        private const int NavigationBarHeight = 56;
+        private const int NavigationButtonHeight = 40;
+        private const int NavigationButtonGap = 10;
         private const int StatusLabelHeight = 36;
         private const string DefaultHotcakesCultureCode = "en-US";
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
@@ -25,12 +28,17 @@ namespace WinFormsApp1
         private readonly Dictionary<string, HotcakesProductPropertySnapshot> loadedProductPropertiesByNameToken = new(StringComparer.Ordinal);
         private readonly HashSet<string> ambiguousProductPropertyNameTokens = new(StringComparer.Ordinal);
         private readonly HotcakesApiClient hotcakesClient;
+        private readonly ImportHistoryStore importHistoryStore = new();
+        private readonly Panel navigationPanel = new();
+        private readonly Button importPageButton = new();
+        private readonly Button bulkOperationsPageButton = new();
         private readonly Label importStatusLabel = new();
         private bool isUpdatingSheetSelection;
         private bool hotcakesReady;
         private bool isInitializingHotcakes;
         private bool isLoadingHotcakesProducts;
         private bool isImporting;
+        private FormPage currentPage = FormPage.Import;
         private ImportValidationResult? lastValidationResult;
 
         public Form1()
@@ -38,6 +46,7 @@ namespace WinFormsApp1
             InitializeComponent();
             hotcakesClient = new HotcakesApiClient(AppSettings.Current.Hotcakes);
             ConfigureImportStatusLabel();
+            ConfigureNavigationBar();
             InitializeSelections();
 
             browseButton.Click += BrowseButton_Click;
@@ -46,6 +55,7 @@ namespace WinFormsApp1
             importTypeComboBox.SelectedIndexChanged += ImportTypeComboBox_SelectedIndexChanged;
             validateButton.Click += ValidateButton_Click;
             importButton.Click += ImportButton_Click;
+            historyButton.Click += HistoryButton_Click;
             Load += (_, _) => UpdateResponsiveLayout();
             Load += async (_, _) => await InitializeHotcakesAsync();
             Resize += (_, _) => UpdateResponsiveLayout();
@@ -90,6 +100,83 @@ namespace WinFormsApp1
             importStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
             importStatusLabel.Text = "Hotcakes kapcsolat elokeszitese...";
             footerPanel.Controls.Add(importStatusLabel);
+        }
+
+        private void ConfigureNavigationBar()
+        {
+            navigationPanel.BackColor = Color.Black;
+            navigationPanel.Dock = DockStyle.Top;
+            navigationPanel.Height = NavigationBarHeight;
+            navigationPanel.TabStop = false;
+
+            ConfigureNavigationButton(importPageButton, "Importalas");
+            ConfigureNavigationButton(bulkOperationsPageButton, "Tomeges muveletek");
+
+            importPageButton.Click += (_, _) => SetCurrentPage(FormPage.Import);
+            bulkOperationsPageButton.Click += (_, _) => SetCurrentPage(FormPage.BulkOperations);
+
+            navigationPanel.Controls.Add(importPageButton);
+            navigationPanel.Controls.Add(bulkOperationsPageButton);
+            Controls.Add(navigationPanel);
+            navigationPanel.BringToFront();
+
+            ApplyCurrentPageState();
+            UpdateNavigationState();
+        }
+
+        private static void ConfigureNavigationButton(Button button, string text)
+        {
+            button.Cursor = Cursors.Hand;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(56, 56, 56);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(36, 36, 36);
+            button.FlatStyle = FlatStyle.Flat;
+            button.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            button.Margin = Padding.Empty;
+            button.Text = text;
+            button.UseVisualStyleBackColor = false;
+        }
+
+        private void SetCurrentPage(FormPage page)
+        {
+            if (currentPage == page)
+            {
+                return;
+            }
+
+            currentPage = page;
+            ApplyCurrentPageState();
+            UpdateNavigationState();
+            AutoScrollPosition = new Point(0, 0);
+            UpdateResponsiveLayout();
+        }
+
+        private void ApplyCurrentPageState()
+        {
+            bool isImportPage = currentPage == FormPage.Import;
+
+            titleLabel.Text = isImportPage ? "Importalas" : "Tomeges muveletek";
+            fileGroupBox.Visible = isImportPage;
+            optionsGroupBox.Visible = isImportPage;
+            previewGroupBox.Visible = isImportPage;
+            footerPanel.Visible = isImportPage;
+            priceGroupBox.Visible = !isImportPage;
+            statusGroupBox.Visible = !isImportPage;
+            categoryGroupBox.Visible = !isImportPage;
+            deleteGroupBox.Visible = !isImportPage;
+            bulkTitleLabel.Visible = false;
+        }
+
+        private void UpdateNavigationState()
+        {
+            StyleNavigationButton(importPageButton, currentPage == FormPage.Import);
+            StyleNavigationButton(bulkOperationsPageButton, currentPage == FormPage.BulkOperations);
+        }
+
+        private static void StyleNavigationButton(Button button, bool isActive)
+        {
+            button.BackColor = isActive ? Color.White : Color.Black;
+            button.ForeColor = isActive ? Color.Black : Color.White;
         }
 
         private void SetStatusMessage(string message, bool isError = false)
@@ -408,6 +495,7 @@ namespace WinFormsApp1
             }
 
             SuspendLayout();
+            navigationPanel.SuspendLayout();
             fileGroupBox.SuspendLayout();
             optionsGroupBox.SuspendLayout();
             previewGroupBox.SuspendLayout();
@@ -419,21 +507,24 @@ namespace WinFormsApp1
 
             try
             {
+                LayoutNavigationBar();
                 int contentWidth = Math.Max(MinimumContentWidth, ClientSize.Width - (PageMargin * 2));
-                int currentY = 22;
+                int currentY = navigationPanel.Bottom + 20;
 
                 titleLabel.Location = new Point(PageMargin, currentY);
                 currentY = titleLabel.Bottom + 20;
 
-                currentY = LayoutFileSection(contentWidth, currentY);
-                currentY = LayoutOptionsSection(contentWidth, currentY);
-                currentY = LayoutPreviewSection(contentWidth, currentY);
-
-                bulkTitleLabel.Location = new Point(PageMargin, currentY);
-                currentY = bulkTitleLabel.Bottom + 16;
-
-                currentY = LayoutBulkSections(contentWidth, currentY);
-                currentY = LayoutFooter(contentWidth, currentY);
+                if (currentPage == FormPage.Import)
+                {
+                    currentY = LayoutFileSection(contentWidth, currentY);
+                    currentY = LayoutOptionsSection(contentWidth, currentY);
+                    currentY = LayoutPreviewSection(contentWidth, currentY);
+                    currentY = LayoutFooter(contentWidth, currentY);
+                }
+                else
+                {
+                    currentY = LayoutBulkSections(contentWidth, currentY);
+                }
 
                 AutoScrollMinSize = new Size(0, currentY + PageMargin);
             }
@@ -447,8 +538,24 @@ namespace WinFormsApp1
                 previewGroupBox.ResumeLayout();
                 optionsGroupBox.ResumeLayout();
                 fileGroupBox.ResumeLayout();
+                navigationPanel.ResumeLayout();
                 ResumeLayout();
             }
+        }
+
+        private void LayoutNavigationBar()
+        {
+            const int topPadding = 8;
+            const int importButtonWidth = 150;
+            const int bulkButtonWidth = 230;
+
+            navigationPanel.Height = NavigationBarHeight;
+            importPageButton.SetBounds(PageMargin, topPadding, importButtonWidth, NavigationButtonHeight);
+            bulkOperationsPageButton.SetBounds(
+                importPageButton.Right + NavigationButtonGap,
+                topPadding,
+                bulkButtonWidth,
+                NavigationButtonHeight);
         }
 
         private int LayoutFileSection(int contentWidth, int y)
@@ -938,13 +1045,40 @@ namespace WinFormsApp1
                 UpdateActionStates();
 
                 ImportExecutionResult importResult = await RunValidatedImportAsync();
-                lastValidationResult = ValidateCurrentImport();
+                string? historySaveWarning = null;
+
+                try
+                {
+                    SaveImportHistory(importResult);
+                }
+                catch (Exception ex)
+                {
+                    historySaveWarning = ex.Message;
+                }
+
+                try
+                {
+                    lastValidationResult = ValidateCurrentImport();
+                }
+                catch
+                {
+                    lastValidationResult = null;
+                }
+
                 UpdateActionStates();
                 SetStatusMessage(importResult.StatusMessage, importResult.ErrorCount > 0);
 
+                string detailsMessage = importResult.DetailsMessage;
+
+                if (!string.IsNullOrWhiteSpace(historySaveWarning))
+                {
+                    detailsMessage +=
+                        $"{Environment.NewLine}{Environment.NewLine}Figyelem: az importelozmeny mentese nem sikerult.{Environment.NewLine}{historySaveWarning}";
+                }
+
                 MessageBox.Show(
                     this,
-                    importResult.DetailsMessage,
+                    detailsMessage,
                     "Import eredmeny",
                     MessageBoxButtons.OK,
                     importResult.ErrorCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
@@ -965,6 +1099,26 @@ namespace WinFormsApp1
                 isImporting = false;
                 UpdateActionStates();
                 UseWaitCursor = false;
+            }
+        }
+
+        private void HistoryButton_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                IReadOnlyList<ImportHistoryEntry> historyEntries = importHistoryStore.LoadAll();
+
+                using ImportHistoryDialog historyDialog = new(historyEntries);
+                historyDialog.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    $"Az importelozmenyek megnyitasa nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "Import elozmenyek",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
             }
         }
 
@@ -993,6 +1147,34 @@ namespace WinFormsApp1
             }
 
             return ImportScope.Products;
+        }
+
+        private void SaveImportHistory(ImportExecutionResult importResult)
+        {
+            ArgumentNullException.ThrowIfNull(importResult);
+
+            string importTypeLabel = importTypeComboBox.SelectedItem?.ToString()?.Trim() ?? "Ismeretlen import";
+            string sourceFilePath = filePathTextBox.Text.Trim();
+
+            importHistoryStore.Append(new ImportHistoryEntry
+            {
+                ImportedAt = DateTimeOffset.Now,
+                ImportTypeLabel = importTypeLabel,
+                SourceFilePath = sourceFilePath,
+                CreatedCount = importResult.CreatedCount,
+                UpdatedCount = importResult.UpdatedCount,
+                SkippedExistingCount = importResult.SkippedExistingCount,
+                ProductTypeAppliedCount = importResult.ProductTypeAppliedCount,
+                CategoryLinkedCount = importResult.CategoryLinkedCount,
+                CategoryAlreadyLinkedCount = importResult.CategoryAlreadyLinkedCount,
+                ImageUploadedCount = importResult.ImageUploadedCount,
+                MainImageUploadedCount = importResult.MainImageUploadedCount,
+                AdditionalImageUploadedCount = importResult.AdditionalImageUploadedCount,
+                PropertyAppliedCount = importResult.PropertyAppliedCount,
+                ErrorCount = importResult.ErrorCount,
+                StatusMessage = importResult.StatusMessage,
+                DetailsMessage = importResult.DetailsMessage
+            });
         }
 
         private bool IncludesProducts(ImportScope importScope)
@@ -1905,9 +2087,12 @@ namespace WinFormsApp1
                 createdCount,
                 updatedCount,
                 skippedExistingCount,
+                productTypeAppliedCount,
                 categoryLinkedCount,
                 categoryAlreadyLinkedCount,
                 imageUploadedCount,
+                mainImageUploadedCount,
+                additionalImageUploadedCount,
                 propertyAppliedCount,
                 errors.Count,
                 statusMessage,
@@ -3433,9 +3618,12 @@ namespace WinFormsApp1
             int CreatedCount,
             int UpdatedCount,
             int SkippedExistingCount,
+            int ProductTypeAppliedCount,
             int CategoryLinkedCount,
             int CategoryAlreadyLinkedCount,
             int ImageUploadedCount,
+            int MainImageUploadedCount,
+            int AdditionalImageUploadedCount,
             int PropertyAppliedCount,
             int ErrorCount,
             string StatusMessage,
@@ -3478,6 +3666,12 @@ namespace WinFormsApp1
             Categories,
             Properties,
             All
+        }
+
+        private enum FormPage
+        {
+            Import,
+            BulkOperations
         }
 
         private sealed record WorksheetPreview(string Name, List<string[]> Rows);
