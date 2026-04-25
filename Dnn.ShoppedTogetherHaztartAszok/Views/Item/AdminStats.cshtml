@@ -23,6 +23,12 @@
 {
     <h3>@Model.SelectedProductName termékkel együtt vásárolt termékek</h3>
 
+    <p>
+        <a href="@("/admin-statisztika?productId=" + Model.SelectedProductId.Value + "&exportCsv=1")" class="dnnPrimaryAction">
+            Export CSV
+        </a>
+    </p>
+
     if (Model.RelatedProducts != null && Model.RelatedProducts.Count > 0)
     {
         <table class="table">

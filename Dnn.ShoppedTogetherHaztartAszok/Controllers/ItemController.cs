@@ -109,8 +109,72 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
             return Content("ADMINSTATS ACTION FUT");
         }
 
+        public ActionResult ExportRelatedCsv(int productId)
+        {
+            var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
+            var repo = new StatisticsRepository(connString);
+
+            var products = repo.GetProducts();
+            var selectedProductName = products.FirstOrDefault(p => p.Id == productId)?.ProductName ?? "Ismeretlen termék";
+            var relatedProducts = repo.GetTopRelatedProducts(productId);
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("ValasztottTermek;EgyuttVasaroltTermek;TogetherCount");
+
+            foreach (var item in relatedProducts)
+            {
+                var selected = selectedProductName.Replace(";", ",");
+                var related = (item.ProductName ?? "").Replace(";", ",");
+                sb.AppendLine($"{selected};{related};{item.TogetherCount}");
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+
+            Response.Clear();
+            Response.ContentType = "text/csv";
+            Response.AddHeader("Content-Disposition", $"attachment;filename=egyutt-vasarolt-termekek-{productId}.csv");
+            Response.BinaryWrite(bytes);
+            Response.End();
+
+            return new EmptyResult();
+        }
+
         public ActionResult Index(int? productId = null)
         {
+            if (Request.QueryString["exportCsv"] == "1" && productId.HasValue)
+            {
+                var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
+                var repo = new StatisticsRepository(connString);
+
+                var products = repo.GetProducts();
+                var selectedProductName = products.FirstOrDefault(p => p.Id == productId.Value)?.ProductName ?? "Ismeretlen termék";
+                var relatedProducts = repo.GetTopRelatedProducts(productId.Value);
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("ValasztottTermek;EgyuttVasaroltTermek;TogetherCount");
+
+                foreach (var item in relatedProducts)
+                {
+                    var selected = selectedProductName.Replace(";", ",");
+                    var related = (item.ProductName ?? "").Replace(";", ",");
+                    sb.AppendLine($"{selected};{related};{item.TogetherCount}");
+                }
+
+                Response.Clear();
+                Response.ClearHeaders();
+                Response.ClearContent();
+                Response.Buffer = true;
+                Response.ContentEncoding = System.Text.Encoding.UTF8;
+                Response.ContentType = "text/csv";
+                Response.AddHeader("Content-Disposition", $"attachment; filename=egyutt-vasarolt-termekek-{productId.Value}.csv");
+                Response.Write(sb.ToString());
+                Response.Flush();
+                Response.SuppressContent = true;
+                HttpContext.ApplicationInstance.CompleteRequest();
+
+                return new EmptyResult();
+            }
+
             var runSync = Request.QueryString["runSync"];
 
             if (runSync == "1")
