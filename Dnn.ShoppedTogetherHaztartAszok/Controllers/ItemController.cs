@@ -10,10 +10,13 @@
 ' 
 */
 
+using Dnn.ShoppedTogetherHaztartAszok.Services;
 using DotNetNuke.Entities.Users;
 using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Web.Mvc.Framework.ActionFilters;
 using DotNetNuke.Web.Mvc.Framework.Controllers;
+using Hotcakes.Commerce;
+using Hotcakes.Commerce.Orders;
 using ShoppedTogetherHaztartasok.Dnn.Models;
 using ShoppedTogetherHaztartasok.Dnn.Services;
 using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Components;
@@ -21,10 +24,8 @@ using ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Web;
 using System.Web.Mvc;
-using Hotcakes.Commerce;
-using Hotcakes.Commerce.Orders;
-using Dnn.ShoppedTogetherHaztartAszok.Services;
 
 namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Controllers
 {
@@ -141,6 +142,19 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
 
         public ActionResult Index(int? productId = null)
         {
+            var limitParam = Request.QueryString["limit"];
+            int limit = 200;
+
+            if (!string.IsNullOrEmpty(limitParam))
+            {
+                int parsedLimit;
+                if (int.TryParse(limitParam, out parsedLimit) && parsedLimit > 0)
+                {
+                    limit = parsedLimit;
+                }
+            }
+
+
             if (Request.QueryString["exportCsv"] == "1" && productId.HasValue)
             {
                 var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
@@ -174,6 +188,45 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
 
                 return new EmptyResult();
             }
+
+            if (Request.QueryString["exportCsv"] == "1" && !productId.HasValue)
+            {
+
+                var connString = DotNetNuke.Data.DataProvider.Instance().ConnectionString;
+                var repo = new StatisticsRepository(connString);
+
+                var pairs = repo.GetTopProductPairs(limit);
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("TermekA;TermekB;TogetherCount");
+
+                foreach (var item in pairs)
+                {
+                    var productA = (item.ProductAName ?? "").Replace(";", ",");
+                    var productB = (item.ProductBName ?? "").Replace(";", ",");
+
+                    sb.AppendLine(
+                        System.Web.HttpUtility.HtmlDecode(productA) + ";" +
+                        System.Web.HttpUtility.HtmlDecode(productB) + ";" +
+                        item.TogetherCount
+                    );
+                }
+
+                Response.Clear();
+                Response.ClearHeaders();
+                Response.ClearContent();
+                Response.Buffer = true;
+                Response.ContentEncoding = System.Text.Encoding.UTF8;
+                Response.ContentType = "text/csv";
+                Response.AddHeader("Content-Disposition", "attachment; filename=top-egyuttvasarlas.csv");
+                Response.Write(sb.ToString());
+                Response.Flush();
+                Response.SuppressContent = true;
+                HttpContext.ApplicationInstance.CompleteRequest();
+
+                return new EmptyResult();
+            }
+
 
             var runSync = Request.QueryString["runSync"];
 
@@ -250,14 +303,20 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
                         : null,
                     RelatedProducts = productId.HasValue
                         ? repo.GetTopRelatedProducts(productId.Value)
-                        : new List<RelatedProductStat>()
-                };
+                        : new List<RelatedProductStat>(),
+                    TopProductPairs = productId.HasValue
+                        ? new List<ProductPairStat>()
+                        : repo.GetTopProductPairs(limit)
+                }
+            ;
 
                 return View("AdminStats", vm);
             }
 
             return View(model);
         }
+
+
     }
 }
 

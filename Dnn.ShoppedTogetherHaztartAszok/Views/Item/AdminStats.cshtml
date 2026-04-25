@@ -27,6 +27,7 @@
         <a href="@("/admin-statisztika?productId=" + Model.SelectedProductId.Value + "&exportCsv=1")" class="dnnPrimaryAction">
             Export CSV
         </a>
+
     </p>
 
     if (Model.RelatedProducts != null && Model.RelatedProducts.Count > 0)
@@ -55,6 +56,7 @@
     }
 }
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -73,4 +75,193 @@
         });
     });
 </script>
+
+@if (!Model.SelectedProductId.HasValue)
+{
+    <h3>
+        Leggyakoribb együtt vásárolt termékpárok (top @Model.TopProductPairs.Count)
+    </h3>
+
+    <div style="margin-bottom:15px;">
+        <label for="limitInput">Megjelenített párok száma:</label>
+        <input type="number" id="limitInput" value="@(string.IsNullOrEmpty(Request.QueryString["limit"]) ? "200" : Request.QueryString["limit"])" min="1" max="1000" style="width:90px;" />
+        <button type="button" id="limitButton" class="dnnPrimaryAction">Frissítés</button>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var btn = document.getElementById("limitButton");
+            var input = document.getElementById("limitInput");
+
+            if (!btn || !input) return;
+
+            btn.addEventListener("click", function () {
+                var value = input.value || 200;
+                window.location.href = "/admin-statisztika?limit=" + encodeURIComponent(value);
+            });
+        });
+    </script>
+
+    <p>
+        <a href="@("/admin-statisztika?exportCsv=1&limit=" + (string.IsNullOrEmpty(Request.QueryString["limit"]) ? "200" : Request.QueryString["limit"]))" class="dnnPrimaryAction">
+            Export CSV
+        </a>
+
+
+        <div style="max-width:100%; margin:20px 0;">
+            <canvas id="topPairsScatterChart" height="120"></canvas>
+        </div>
+
+        <script>
+window.topProductPairs = [];
+window.productIndexMap = {};
+window.productNames = [];
+
+@{
+    var index = 0;
+    var productIndex = new Dictionary<string, int>();
+}
+
+@for (int i = 0; i < Model.TopProductPairs.Count; i++)
+{
+    var pair = Model.TopProductPairs[i];
+
+    if (!productIndex.ContainsKey(pair.ProductAName))
+    {
+        productIndex[pair.ProductAName] = index;
+        <text>
+        window.productIndexMap['@HttpUtility.JavaScriptStringEncode(pair.ProductAName)'] = @index;
+        window.productNames[@index] = '@HttpUtility.JavaScriptStringEncode(pair.ProductAName)';
+        </text>
+        index++;
+    }
+
+    if (!productIndex.ContainsKey(pair.ProductBName))
+    {
+        productIndex[pair.ProductBName] = index;
+        <text>
+        window.productIndexMap['@HttpUtility.JavaScriptStringEncode(pair.ProductBName)'] = @index;
+        window.productNames[@index] = '@HttpUtility.JavaScriptStringEncode(pair.ProductBName)';
+        </text>
+        index++;
+    }
+
+    var aIndex = productIndex[pair.ProductAName];
+    var bIndex = productIndex[pair.ProductBName];
+
+    <text>
+        var count = @pair.TogetherCount;
+
+        // normalizálás (állítsd majd finomra)
+        var intensity = Math.min(1, count / 20);
+
+        // szín: kék → piros
+        var red = Math.floor(255 * intensity);
+        var blue = Math.floor(255 * (1 - intensity));
+
+        var color = 'rgba(' + red + ', 50, ' + blue + ', 0.7)';
+
+        window.topProductPairs.push({
+            x: @aIndex,
+            y: @bIndex,
+            r: Math.max(5, count * 2), // kicsit látványosabb méret
+            backgroundColor: color,
+            borderColor: color,
+            label: '@HttpUtility.JavaScriptStringEncode(pair.ProductAName + " + " + pair.ProductBName)',
+            count: count
+        });
+    </text>
+}
+        </script>
+
+
+    </p>
+
+
+}
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        function decodeHtml(text) {
+            var textarea = document.createElement("textarea");
+            textarea.innerHTML = text;
+            return textarea.value;
+        }
+
+        var canvas = document.getElementById("topPairsScatterChart");
+
+        if (!canvas || !window.topProductPairs || window.topProductPairs.length === 0) {
+            return;
+        }
+
+        new Chart(canvas, {
+            type: "bubble",
+            data: {
+            datasets: [{
+                label: "TOP @Model.TopProductPairs.Count együtt vásárolt termékpár",
+                data: window.topProductPairs,
+                parsing: false,
+                pointRadius: function (context) {
+                    var count = context.raw.count || 1;
+                    return Math.max(5, Math.min(30, count * 4));
+                },
+                backgroundColor: function (context) {
+                    var count = context.raw.count || 1;
+                    var intensity = Math.min(1, count / 20);
+                    var red = Math.floor(255 * intensity);
+                    var blue = Math.floor(255 * (1 - intensity));
+                    return "rgba(" + red + ", 80, " + blue + ", 0.65)";
+                },
+                borderColor: function (context) {
+                    var count = context.raw.count || 1;
+                    var intensity = Math.min(1, count / 20);
+                    var red = Math.floor(255 * intensity);
+                    var blue = Math.floor(255 * (1 - intensity));
+                    return "rgba(" + red + ", 80, " + blue + ", 1)";
+                }
+            }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                return decodeHtml(context.raw.label) + " - " + context.raw.count + " db";
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: "Termék A"
+                        },
+                        ticks: {
+                            callback: function () {
+                                return "";
+                            },
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: "Termék B"
+                        },
+                        ticks: {
+                            callback: function () {
+                                return "";
+                            }
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    });
+</script>
+
+
 

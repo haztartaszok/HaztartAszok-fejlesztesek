@@ -10,5 +10,8 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Models
         public List<RelatedProductStat> RelatedProducts { get; set; }
 
         public string SelectedProductName { get; set; }
+
+        public List<ProductPairStat> TopProductPairs { get; set; }
+
     }
 }
