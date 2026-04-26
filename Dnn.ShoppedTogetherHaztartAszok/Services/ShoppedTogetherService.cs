@@ -215,6 +215,8 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                     placedOrders = orderRepo.Find("WHERE IsPlaced = 1").ToList();
                 }
 
+                var pairCounts = new Dictionary<string, int>();
+
                 foreach (var order in placedOrders)
                 {
                     var productIdsInOrder = lineItemRepo.Find("WHERE OrderBvin = @0", order.bvin)
@@ -229,21 +231,54 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                     {
                         for (int j = i + 1; j < productIdsInOrder.Count; j++)
                         {
-                            int productAId = productIdsInOrder[i];
-                            int productBId = productIdsInOrder[j];
+                            var productAId = productIdsInOrder[i];
+                            var productBId = productIdsInOrder[j];
 
-                            var pair = pairRepo.Find(
-                                    "WHERE ProductAId = @0 AND ProductBId = @1",
-                                    productAId,
-                                    productBId)
-                                .FirstOrDefault();
-
-                            if (pair != null)
+                            if (productAId > productBId)
                             {
-                                pair.TogetherCount += 1;
-                                pairRepo.Update(pair);
+                                var temp = productAId;
+                                productAId = productBId;
+                                productBId = temp;
                             }
+
+                            var key = productAId + "|" + productBId;
+
+                            if (!pairCounts.ContainsKey(key))
+                            {
+                                pairCounts[key] = 0;
+                            }
+
+                            pairCounts[key]++;
                         }
+                    }
+                }
+
+                foreach (var item in pairCounts)
+                {
+                    var parts = item.Key.Split('|');
+                    var productAId = int.Parse(parts[0]);
+                    var productBId = int.Parse(parts[1]);
+                    var incrementBy = item.Value;
+
+                    var pair = pairRepo.Find(
+                            "WHERE ProductAId = @0 AND ProductBId = @1",
+                            productAId,
+                            productBId)
+                        .FirstOrDefault();
+
+                    if (pair != null)
+                    {
+                        pair.TogetherCount += incrementBy;
+                        pairRepo.Update(pair);
+                    }
+                    else
+                    {
+                        pairRepo.Insert(new ShoppedTogetherProductPair
+                        {
+                            ProductAId = productAId,
+                            ProductBId = productBId,
+                            TogetherCount = incrementBy
+                        });
                     }
                 }
 
