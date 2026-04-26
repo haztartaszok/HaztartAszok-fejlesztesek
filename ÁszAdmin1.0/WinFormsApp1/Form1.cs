@@ -27,6 +27,7 @@ namespace WinFormsApp1
         private readonly HashSet<string> ambiguousProductTypeNameTokens = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HotcakesProductPropertySnapshot> loadedProductPropertiesByNameToken = new(StringComparer.Ordinal);
         private readonly HashSet<string> ambiguousProductPropertyNameTokens = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, HashSet<string>> loadedCategoryIdsByProductBvin = new(StringComparer.OrdinalIgnoreCase);
         private readonly HotcakesApiClient hotcakesClient;
         private readonly ImportHistoryStore importHistoryStore = new();
         private readonly Panel navigationPanel = new();
@@ -53,6 +54,8 @@ namespace WinFormsApp1
             SablonButton.Click += SablonButton_Click;
             sheetComboBox.SelectedIndexChanged += SheetComboBox_SelectedIndexChanged;
             importTypeComboBox.SelectedIndexChanged += ImportTypeComboBox_SelectedIndexChanged;
+            priceActionButton.Click += PriceActionButton_Click;
+            priceCategoryComboBox.SelectedIndexChanged += PriceCategoryComboBox_SelectedIndexChanged;
             statusFilterComboBox.SelectedIndexChanged += StatusFilterComboBox_SelectedIndexChanged;
             validateButton.Click += ValidateButton_Click;
             importButton.Click += ImportButton_Click;
@@ -91,6 +94,7 @@ namespace WinFormsApp1
             sheetComboBox.Items.Clear();
             sheetComboBox.Enabled = false;
             ClearPreviewGrid();
+            UpdatePriceAffectedProductsDisplay("0");
             UpdateStatusCategoryFilterUI();
             SetStatusMessage("Valassz import fajlt az indulashoz.");
         }
@@ -151,6 +155,11 @@ namespace WinFormsApp1
             UpdateNavigationState();
             AutoScrollPosition = new Point(0, 0);
             UpdateResponsiveLayout();
+
+            if (currentPage == FormPage.BulkOperations)
+            {
+                _ = RefreshPriceAffectedProductsAsync();
+            }
         }
 
         private void ApplyCurrentPageState()
@@ -255,6 +264,12 @@ namespace WinFormsApp1
 
                 PopulateCategorySelectors();
                 hotcakesReady = true;
+
+                if (currentPage == FormPage.BulkOperations)
+                {
+                    _ = RefreshPriceAffectedProductsAsync();
+                }
+
                 SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus, {loadedProductProperties.Count} termektulajdonsag betoltve.");
             }
             catch (Exception ex)
@@ -295,6 +310,12 @@ namespace WinFormsApp1
             ReplaceComboBoxItems(sourceCategoryComboBox, categoryItems.Cast<object>().ToList(), categoryItems.Count > 0 ? 0 : -1);
             ReplaceComboBoxItems(targetCategoryComboBox, targetItems, 0);
             ReplaceComboBoxItems(statusCategoryComboBox, statusItems, 0);
+
+            if (currentPage == FormPage.BulkOperations)
+            {
+                _ = RefreshPriceAffectedProductsAsync();
+            }
+
             UpdateStatusCategoryFilterUI();
         }
 
@@ -492,6 +513,7 @@ namespace WinFormsApp1
 
             validateButton.Enabled = hotcakesReady && !isBusy && loadedWorkbookSheets.Count > 0;
             importButton.Enabled = hotcakesReady && !isBusy && lastValidationResult?.CanProceed == true;
+            priceActionButton.Enabled = hotcakesReady && !isBusy;
         }
 
         private void UpdateResponsiveLayout()
@@ -739,6 +761,306 @@ namespace WinFormsApp1
             }
 
             statusFilterComboBox.SetBounds(left, top, contentWidth, statusFilterComboBox.Height);
+        }
+
+        private async void PriceCategoryComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (currentPage != FormPage.BulkOperations)
+            {
+                return;
+            }
+
+            await RefreshPriceAffectedProductsAsync();
+        }
+
+        private async void PriceActionButton_Click(object? sender, EventArgs e)
+        {
+            if (!hotcakesReady)
+            {
+                MessageBox.Show(
+                    this,
+                    "A Hotcakes kapcsolat meg nem all keszen a tomeges arfrissiteshez.",
+                    "Tomeges arfrissites",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!TryParsePriceBulkValue(out decimal inputValue, out string? validationError))
+            {
+                MessageBox.Show(
+                    this,
+                    validationError ?? "Az arfissites erteke nem ervenyes.",
+                    "Tomeges arfrissites",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                UseWaitCursor = true;
+                isImporting = true;
+                UpdateActionStates();
+
+                List<HotcakesProduct> targetProducts = await GetProductsForBulkPriceUpdateAsync();
+
+                if (targetProducts.Count == 0)
+                {
+                    MessageBox.Show(
+                        this,
+                        "A jelenlegi szures egyetlen termeket sem erint.",
+                        "Tomeges arfrissites",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                string modeLabel = priceModeComboBox.SelectedItem?.ToString()?.Trim() ?? "Arfrissites";
+                string categoryLabel = priceCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Osszes kategoria";
+
+                DialogResult confirmationResult = MessageBox.Show(
+                    this,
+                    $"Valoban lefuttatod a tomeges arfrissitest?{Environment.NewLine}{Environment.NewLine}" +
+                    $"Erintett termekek: {targetProducts.Count}{Environment.NewLine}" +
+                    $"Kategoria: {categoryLabel}{Environment.NewLine}" +
+                    $"Modositas tipusa: {modeLabel}{Environment.NewLine}" +
+                    $"Ertek: {priceValueTextBox.Text.Trim()}",
+                    "Tomeges arfrissites",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (confirmationResult != DialogResult.Yes)
+                {
+                    return;
+                }
+
+                int updatedCount = 0;
+                int unchangedCount = 0;
+                List<string> errors = [];
+
+                for (int index = 0; index < targetProducts.Count; index++)
+                {
+                    HotcakesProduct targetProduct = targetProducts[index];
+
+                    try
+                    {
+                        HotcakesProduct? currentProduct = await hotcakesClient.GetProductBySkuAsync(targetProduct.Sku);
+
+                        if (currentProduct is null)
+                        {
+                            errors.Add($"{targetProduct.Sku}: a termek nem talalhato frissites elott.");
+                            continue;
+                        }
+
+                        decimal currentBasePrice = currentProduct.SitePrice;
+                        decimal newPrice = CalculateBulkPriceValue(currentBasePrice, inputValue);
+
+                        if (newPrice < 0m)
+                        {
+                            errors.Add($"{targetProduct.Sku}: a szamitott uj ar negativ lenne.");
+                            continue;
+                        }
+
+                        decimal normalizedPrice = decimal.Round(newPrice, 2, MidpointRounding.AwayFromZero);
+
+                        if (currentProduct.ListPrice == normalizedPrice && currentProduct.SitePrice == normalizedPrice)
+                        {
+                            unchangedCount++;
+                            continue;
+                        }
+
+                        currentProduct.ListPrice = normalizedPrice;
+                        currentProduct.SitePrice = normalizedPrice;
+
+                        HotcakesProduct savedProduct = await hotcakesClient.UpdateProductAsync(currentProduct);
+                        loadedProductsBySku[targetProduct.Sku] = savedProduct;
+                        updatedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"{targetProduct.Sku}: {ex.Message}");
+                    }
+                }
+
+                await RefreshPriceAffectedProductsAsync();
+
+                StringBuilder resultBuilder = new();
+                resultBuilder.AppendLine("Tomeges arfrissites eredmeny");
+                resultBuilder.AppendLine($"Erintett termekek: {targetProducts.Count}");
+                resultBuilder.AppendLine($"Sikeresen frissitett termekek: {updatedCount}");
+                resultBuilder.AppendLine($"Valtozatlanul maradt termekek: {unchangedCount}");
+                resultBuilder.AppendLine($"Hibas termekek: {errors.Count}");
+
+                if (errors.Count > 0)
+                {
+                    resultBuilder.AppendLine();
+                    resultBuilder.AppendLine("Elso hibak:");
+
+                    foreach (string error in errors.Take(10))
+                    {
+                        resultBuilder.AppendLine($"- {error}");
+                    }
+                }
+
+                MessageBox.Show(
+                    this,
+                    resultBuilder.ToString(),
+                    "Tomeges arfrissites",
+                    MessageBoxButtons.OK,
+                    errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    $"A tomeges arfrissites nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "Tomeges arfrissites",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                isImporting = false;
+                UpdateActionStates();
+                UseWaitCursor = false;
+            }
+        }
+
+        private async Task RefreshPriceAffectedProductsAsync()
+        {
+            if (!hotcakesReady)
+            {
+                UpdatePriceAffectedProductsDisplay("0");
+                return;
+            }
+
+            try
+            {
+                UpdatePriceAffectedProductsDisplay("...");
+                List<HotcakesProduct> targetProducts = await GetProductsForBulkPriceUpdateAsync();
+                UpdatePriceAffectedProductsDisplay(targetProducts.Count.ToString(CultureInfo.InvariantCulture));
+            }
+            catch
+            {
+                UpdatePriceAffectedProductsDisplay("?");
+            }
+        }
+
+        private void UpdatePriceAffectedProductsDisplay(string value)
+        {
+            priceAffectedProductsValueLabel.Text = value;
+        }
+
+        private async Task<List<HotcakesProduct>> GetProductsForBulkPriceUpdateAsync()
+        {
+            await EnsureProductsLoadedAsync();
+
+            string? selectedCategoryId = GetSelectedPriceCategoryId();
+
+            if (string.IsNullOrWhiteSpace(selectedCategoryId))
+            {
+                return loadedProductsBySku.Values
+                    .OrderBy(product => product.Sku, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            List<HotcakesProduct> matchedProducts = [];
+
+            foreach (HotcakesProduct product in loadedProductsBySku.Values.OrderBy(product => product.Sku, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(product.Bvin))
+                {
+                    continue;
+                }
+
+                IReadOnlySet<string> assignedCategoryIds = await GetAssignedCategoryIdsForProductAsync(product.Bvin);
+
+                if (assignedCategoryIds.Contains(selectedCategoryId))
+                {
+                    matchedProducts.Add(product);
+                }
+            }
+
+            return matchedProducts;
+        }
+
+        private async Task<IReadOnlySet<string>> GetAssignedCategoryIdsForProductAsync(string productBvin)
+        {
+            if (loadedCategoryIdsByProductBvin.TryGetValue(productBvin, out HashSet<string>? cachedCategoryIds))
+            {
+                return cachedCategoryIds;
+            }
+
+            IReadOnlyList<HotcakesCategorySnapshot> assignedCategories = await hotcakesClient.GetCategoriesForProductAsync(productBvin);
+            HashSet<string> resolvedCategoryIds = assignedCategories
+                .Select(category => category.Bvin)
+                .Where(bvin => !string.IsNullOrWhiteSpace(bvin))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            loadedCategoryIdsByProductBvin[productBvin] = resolvedCategoryIds;
+            return resolvedCategoryIds;
+        }
+
+        private string? GetSelectedPriceCategoryId()
+        {
+            return priceCategoryComboBox.SelectedItem is CategoryComboItem selectedCategory
+                ? selectedCategory.Bvin
+                : null;
+        }
+
+        private bool TryParsePriceBulkValue(out decimal value, out string? validationError)
+        {
+            string rawValue = priceValueTextBox.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                value = 0m;
+                validationError = "Adj meg egy ervenyes erteket a tomeges arfrissiteshez.";
+                return false;
+            }
+
+            if (!TryParseImportDecimal(rawValue, out value))
+            {
+                validationError = $"A megadott ertek nem ervenyes szam: {rawValue}";
+                return false;
+            }
+
+            if (GetSelectedPriceBulkMode() == PriceBulkMode.SetAbsolutePrice && value < 0m)
+            {
+                validationError = "Az uj ar nem lehet negativ.";
+                return false;
+            }
+
+            validationError = null;
+            return true;
+        }
+
+        private decimal CalculateBulkPriceValue(decimal currentPrice, decimal inputValue)
+        {
+            return GetSelectedPriceBulkMode() switch
+            {
+                PriceBulkMode.PercentChange => currentPrice + (currentPrice * (inputValue / 100m)),
+                PriceBulkMode.FixedDelta => currentPrice + inputValue,
+                _ => inputValue
+            };
+        }
+
+        private PriceBulkMode GetSelectedPriceBulkMode()
+        {
+            string selectedMode = NormalizeToken(priceModeComboBox.SelectedItem?.ToString() ?? string.Empty);
+
+            if (selectedMode.Contains("FIXOSSZEGHOZZAADASA", StringComparison.Ordinal))
+            {
+                return PriceBulkMode.FixedDelta;
+            }
+
+            if (selectedMode.Contains("UJARBEALLITASA", StringComparison.Ordinal))
+            {
+                return PriceBulkMode.SetAbsolutePrice;
+            }
+
+            return PriceBulkMode.PercentChange;
         }
 
         private int LayoutFooter(int contentWidth, int y)
@@ -1261,6 +1583,7 @@ namespace WinFormsApp1
                 int duplicateSkuCount = 0;
 
                 loadedProductsBySku.Clear();
+                loadedCategoryIdsByProductBvin.Clear();
 
                 foreach (HotcakesProduct product in products)
                 {
@@ -2208,6 +2531,7 @@ namespace WinFormsApp1
                             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                         assignedCategoryIdsByProduct[product.Bvin] = assignedCategoryIds;
+                        loadedCategoryIdsByProductBvin[product.Bvin] = assignedCategoryIds;
                     }
 
                     if (assignedCategoryIds.Contains(category.Bvin))
@@ -2223,6 +2547,7 @@ namespace WinFormsApp1
                     });
 
                     assignedCategoryIds.Add(category.Bvin);
+                    loadedCategoryIdsByProductBvin[product.Bvin] = assignedCategoryIds;
                     linkedCount++;
                 }
                 catch (Exception ex)
@@ -3699,6 +4024,13 @@ namespace WinFormsApp1
             int InvalidPropertyCount,
             bool CanProceed,
             string DetailsMessage);
+
+        private enum PriceBulkMode
+        {
+            PercentChange,
+            FixedDelta,
+            SetAbsolutePrice
+        }
 
         private enum ExistingProductImportMode
         {

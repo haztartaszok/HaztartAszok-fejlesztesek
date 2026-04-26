@@ -55,6 +55,8 @@ namespace WinFormsApp1
             priceActionButton = new Button();
             priceValueTextBox = new TextBox();
             priceValueLabel = new Label();
+            priceAffectedProductsValueLabel = new Label();
+            priceAffectedProductsLabel = new Label();
             priceModeComboBox = new ComboBox();
             priceModeLabel = new Label();
             priceCategoryComboBox = new ComboBox();
@@ -342,6 +344,8 @@ namespace WinFormsApp1
             // priceGroupBox
             // 
             priceGroupBox.Controls.Add(priceActionButton);
+            priceGroupBox.Controls.Add(priceAffectedProductsValueLabel);
+            priceGroupBox.Controls.Add(priceAffectedProductsLabel);
             priceGroupBox.Controls.Add(priceValueTextBox);
             priceGroupBox.Controls.Add(priceValueLabel);
             priceGroupBox.Controls.Add(priceModeComboBox);
@@ -388,6 +392,26 @@ namespace WinFormsApp1
             priceValueLabel.Size = new Size(51, 25);
             priceValueLabel.TabIndex = 5;
             priceValueLabel.Text = "Érték";
+            // 
+            // priceAffectedProductsValueLabel
+            // 
+            priceAffectedProductsValueLabel.AutoSize = true;
+            priceAffectedProductsValueLabel.Location = new Point(208, 292);
+            priceAffectedProductsValueLabel.Margin = new Padding(4, 0, 4, 0);
+            priceAffectedProductsValueLabel.Name = "priceAffectedProductsValueLabel";
+            priceAffectedProductsValueLabel.Size = new Size(22, 25);
+            priceAffectedProductsValueLabel.TabIndex = 9;
+            priceAffectedProductsValueLabel.Text = "0";
+            // 
+            // priceAffectedProductsLabel
+            // 
+            priceAffectedProductsLabel.AutoSize = true;
+            priceAffectedProductsLabel.Location = new Point(30, 292);
+            priceAffectedProductsLabel.Margin = new Padding(4, 0, 4, 0);
+            priceAffectedProductsLabel.Name = "priceAffectedProductsLabel";
+            priceAffectedProductsLabel.Size = new Size(150, 25);
+            priceAffectedProductsLabel.TabIndex = 8;
+            priceAffectedProductsLabel.Text = "Érintett termékek:";
             // 
             // priceModeComboBox
             // 
@@ -878,6 +902,8 @@ namespace WinFormsApp1
         private Button priceActionButton;
         private TextBox priceValueTextBox;
         private Label priceValueLabel;
+        private Label priceAffectedProductsValueLabel;
+        private Label priceAffectedProductsLabel;
         private ComboBox priceModeComboBox;
         private Label priceModeLabel;
         private ComboBox priceCategoryComboBox;
