@@ -28,6 +28,7 @@ namespace WinFormsApp1
         private readonly Dictionary<string, HotcakesProductPropertySnapshot> loadedProductPropertiesByNameToken = new(StringComparer.Ordinal);
         private readonly HashSet<string> ambiguousProductPropertyNameTokens = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<string>> loadedCategoryIdsByProductBvin = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<HotcakesProductInventory>> loadedInventoriesByProductBvin = new(StringComparer.OrdinalIgnoreCase);
         private readonly HotcakesApiClient hotcakesClient;
         private readonly ImportHistoryStore importHistoryStore = new();
         private readonly Panel navigationPanel = new();
@@ -57,6 +58,8 @@ namespace WinFormsApp1
             priceActionButton.Click += PriceActionButton_Click;
             priceCategoryComboBox.SelectedIndexChanged += PriceCategoryComboBox_SelectedIndexChanged;
             statusFilterComboBox.SelectedIndexChanged += StatusFilterComboBox_SelectedIndexChanged;
+            statusCategoryComboBox.SelectedIndexChanged += StatusCategoryComboBox_SelectedIndexChanged;
+            statusActionButton.Click += StatusActionButton_Click;
             validateButton.Click += ValidateButton_Click;
             importButton.Click += ImportButton_Click;
             historyButton.Click += HistoryButton_Click;
@@ -95,6 +98,7 @@ namespace WinFormsApp1
             sheetComboBox.Enabled = false;
             ClearPreviewGrid();
             UpdatePriceAffectedProductsDisplay("0");
+            UpdateStatusAffectedProductsDisplay("0");
             UpdateStatusCategoryFilterUI();
             SetStatusMessage("Valassz import fajlt az indulashoz.");
         }
@@ -159,6 +163,7 @@ namespace WinFormsApp1
             if (currentPage == FormPage.BulkOperations)
             {
                 _ = RefreshPriceAffectedProductsAsync();
+                _ = RefreshStatusAffectedProductsAsync();
             }
         }
 
@@ -268,6 +273,7 @@ namespace WinFormsApp1
                 if (currentPage == FormPage.BulkOperations)
                 {
                     _ = RefreshPriceAffectedProductsAsync();
+                    _ = RefreshStatusAffectedProductsAsync();
                 }
 
                 SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus, {loadedProductProperties.Count} termektulajdonsag betoltve.");
@@ -314,6 +320,7 @@ namespace WinFormsApp1
             if (currentPage == FormPage.BulkOperations)
             {
                 _ = RefreshPriceAffectedProductsAsync();
+                _ = RefreshStatusAffectedProductsAsync();
             }
 
             UpdateStatusCategoryFilterUI();
@@ -514,6 +521,7 @@ namespace WinFormsApp1
             validateButton.Enabled = hotcakesReady && !isBusy && loadedWorkbookSheets.Count > 0;
             importButton.Enabled = hotcakesReady && !isBusy && lastValidationResult?.CanProceed == true;
             priceActionButton.Enabled = hotcakesReady && !isBusy;
+            statusActionButton.Enabled = hotcakesReady && !isBusy;
         }
 
         private void UpdateResponsiveLayout()
@@ -720,9 +728,14 @@ namespace WinFormsApp1
             return statusGroupBox.Bottom + SectionSpacing;
         }
 
-        private void StatusFilterComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        private async void StatusFilterComboBox_SelectedIndexChanged(object? sender, EventArgs e)
         {
             UpdateStatusCategoryFilterUI();
+
+            if (currentPage == FormPage.BulkOperations)
+            {
+                await RefreshStatusAffectedProductsAsync();
+            }
         }
 
         private void UpdateStatusCategoryFilterUI()
@@ -771,6 +784,16 @@ namespace WinFormsApp1
             }
 
             await RefreshPriceAffectedProductsAsync();
+        }
+
+        private async void StatusCategoryComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (currentPage != FormPage.BulkOperations)
+            {
+                return;
+            }
+
+            await RefreshStatusAffectedProductsAsync();
         }
 
         private async void PriceActionButton_Click(object? sender, EventArgs e)
@@ -1061,6 +1084,320 @@ namespace WinFormsApp1
             }
 
             return PriceBulkMode.PercentChange;
+        }
+
+        private async void StatusActionButton_Click(object? sender, EventArgs e)
+        {
+            if (!hotcakesReady)
+            {
+                MessageBox.Show(
+                    this,
+                    "A Hotcakes kapcsolat meg nem all keszen a statuszmodositas futtatasahoz.",
+                    "Aktivalas / Inaktivalas",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            StatusBulkFilter selectedFilter = GetSelectedStatusBulkFilter();
+            string? selectedCategoryId = GetSelectedStatusCategoryId();
+
+            if (selectedFilter == StatusBulkFilter.ByCategory && string.IsNullOrWhiteSpace(selectedCategoryId))
+            {
+                MessageBox.Show(
+                    this,
+                    "Valassz kategoriat az 'Adott kategoria' szureshez.",
+                    "Aktivalas / Inaktivalas",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                UseWaitCursor = true;
+                isImporting = true;
+                UpdateActionStates();
+
+                List<HotcakesProduct> targetProducts = await GetProductsForBulkStatusUpdateAsync();
+
+                if (targetProducts.Count == 0)
+                {
+                    MessageBox.Show(
+                        this,
+                        "A jelenlegi szures egyetlen termeket sem erint.",
+                        "Aktivalas / Inaktivalas",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                StatusBulkTargetState targetState = GetSelectedStatusBulkTargetState();
+                string targetStateLabel = targetState == StatusBulkTargetState.Active ? "Aktiv" : "Inaktiv";
+                string filterLabel = GetSelectedStatusFilterSummary();
+
+                DialogResult confirmationResult = MessageBox.Show(
+                    this,
+                    $"Valoban lefuttatod a statuszmodositast?{Environment.NewLine}{Environment.NewLine}" +
+                    $"Erintett termekek: {targetProducts.Count}{Environment.NewLine}" +
+                    $"Szures: {filterLabel}{Environment.NewLine}" +
+                    $"Uj statusz: {targetStateLabel}",
+                    "Aktivalas / Inaktivalas",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (confirmationResult != DialogResult.Yes)
+                {
+                    return;
+                }
+
+                int updatedCount = 0;
+                int unchangedCount = 0;
+                List<string> errors = [];
+                int targetStatusValue = targetState == StatusBulkTargetState.Active
+                    ? HotcakesProductStatuses.Active
+                    : HotcakesProductStatuses.Disabled;
+                bool targetAvailability = targetState == StatusBulkTargetState.Active;
+
+                for (int index = 0; index < targetProducts.Count; index++)
+                {
+                    HotcakesProduct targetProduct = targetProducts[index];
+
+                    try
+                    {
+                        HotcakesProduct? currentProduct = await hotcakesClient.GetProductBySkuAsync(targetProduct.Sku);
+
+                        if (currentProduct is null)
+                        {
+                            errors.Add($"{targetProduct.Sku}: a termek nem talalhato frissites elott.");
+                            continue;
+                        }
+
+                        if (currentProduct.Status == targetStatusValue &&
+                            currentProduct.IsAvailableForSale == targetAvailability)
+                        {
+                            unchangedCount++;
+                            continue;
+                        }
+
+                        currentProduct.Status = targetStatusValue;
+                        currentProduct.IsAvailableForSale = targetAvailability;
+
+                        HotcakesProduct savedProduct = await hotcakesClient.UpdateProductAsync(currentProduct);
+                        loadedProductsBySku[targetProduct.Sku] = savedProduct;
+                        updatedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"{targetProduct.Sku}: {ex.Message}");
+                    }
+                }
+
+                await RefreshStatusAffectedProductsAsync();
+
+                StringBuilder resultBuilder = new();
+                resultBuilder.AppendLine("Statuszmodositas eredmeny");
+                resultBuilder.AppendLine($"Erintett termekek: {targetProducts.Count}");
+                resultBuilder.AppendLine($"Sikeresen modositott termekek: {updatedCount}");
+                resultBuilder.AppendLine($"Valtozatlanul maradt termekek: {unchangedCount}");
+                resultBuilder.AppendLine($"Hibas termekek: {errors.Count}");
+
+                if (errors.Count > 0)
+                {
+                    resultBuilder.AppendLine();
+                    resultBuilder.AppendLine("Elso hibak:");
+
+                    foreach (string error in errors.Take(10))
+                    {
+                        resultBuilder.AppendLine($"- {error}");
+                    }
+                }
+
+                MessageBox.Show(
+                    this,
+                    resultBuilder.ToString(),
+                    "Aktivalas / Inaktivalas",
+                    MessageBoxButtons.OK,
+                    errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    $"A statuszmodositas nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                    "Aktivalas / Inaktivalas",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                isImporting = false;
+                UpdateActionStates();
+                UseWaitCursor = false;
+            }
+        }
+
+        private async Task RefreshStatusAffectedProductsAsync()
+        {
+            if (!hotcakesReady)
+            {
+                UpdateStatusAffectedProductsDisplay("0");
+                return;
+            }
+
+            try
+            {
+                UpdateStatusAffectedProductsDisplay("...");
+                List<HotcakesProduct> targetProducts = await GetProductsForBulkStatusUpdateAsync();
+                UpdateStatusAffectedProductsDisplay(targetProducts.Count.ToString(CultureInfo.InvariantCulture));
+            }
+            catch
+            {
+                UpdateStatusAffectedProductsDisplay("?");
+            }
+        }
+
+        private void UpdateStatusAffectedProductsDisplay(string value)
+        {
+            affectedProductsValueLabel.Text = value;
+        }
+
+        private async Task<List<HotcakesProduct>> GetProductsForBulkStatusUpdateAsync()
+        {
+            await EnsureProductsLoadedAsync();
+
+            StatusBulkFilter selectedFilter = GetSelectedStatusBulkFilter();
+            string? selectedCategoryId = GetSelectedStatusCategoryId();
+            List<HotcakesProduct> products = loadedProductsBySku.Values
+                .Where(product => !string.IsNullOrWhiteSpace(product.Sku))
+                .OrderBy(product => product.Sku, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (selectedFilter == StatusBulkFilter.AllProducts)
+            {
+                return products;
+            }
+
+            if (selectedFilter == StatusBulkFilter.ByCategory)
+            {
+                if (string.IsNullOrWhiteSpace(selectedCategoryId))
+                {
+                    return [];
+                }
+
+                List<HotcakesProduct> matchedProducts = [];
+
+                foreach (HotcakesProduct product in products)
+                {
+                    if (string.IsNullOrWhiteSpace(product.Bvin))
+                    {
+                        continue;
+                    }
+
+                    IReadOnlySet<string> assignedCategoryIds = await GetAssignedCategoryIdsForProductAsync(product.Bvin);
+
+                    if (assignedCategoryIds.Contains(selectedCategoryId))
+                    {
+                        matchedProducts.Add(product);
+                    }
+                }
+
+                return matchedProducts;
+            }
+
+            List<HotcakesProduct> outOfStockProducts = [];
+
+            foreach (HotcakesProduct product in products)
+            {
+                if (await IsProductOutOfStockAsync(product))
+                {
+                    outOfStockProducts.Add(product);
+                }
+            }
+
+            return outOfStockProducts;
+        }
+
+        private async Task<bool> IsProductOutOfStockAsync(HotcakesProduct product)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+
+            if (string.IsNullOrWhiteSpace(product.Bvin))
+            {
+                return false;
+            }
+
+            if (product.InventoryMode is HotcakesInventoryModes.AlwayInStock or HotcakesInventoryModes.NotSet or HotcakesInventoryModes.Unknown)
+            {
+                return false;
+            }
+
+            IReadOnlyList<HotcakesProductInventory> inventories = await GetProductInventoriesForBulkAsync(product.Bvin);
+
+            if (inventories.Count == 0)
+            {
+                return true;
+            }
+
+            int availableQuantity = inventories.Sum(inventory => inventory.QuantityOnHand - inventory.QuantityReserved);
+            return availableQuantity <= 0;
+        }
+
+        private async Task<IReadOnlyList<HotcakesProductInventory>> GetProductInventoriesForBulkAsync(string productBvin)
+        {
+            if (loadedInventoriesByProductBvin.TryGetValue(productBvin, out List<HotcakesProductInventory>? cachedInventories))
+            {
+                return cachedInventories;
+            }
+
+            IReadOnlyList<HotcakesProductInventory> inventories = await hotcakesClient.GetProductInventoriesAsync(productBvin);
+            List<HotcakesProductInventory> resolvedInventories = inventories.ToList();
+            loadedInventoriesByProductBvin[productBvin] = resolvedInventories;
+            return resolvedInventories;
+        }
+
+        private string? GetSelectedStatusCategoryId()
+        {
+            return statusCategoryComboBox.SelectedItem is CategoryComboItem selectedCategory
+                ? selectedCategory.Bvin
+                : null;
+        }
+
+        private StatusBulkFilter GetSelectedStatusBulkFilter()
+        {
+            string selectedFilter = NormalizeToken(statusFilterComboBox.SelectedItem?.ToString() ?? string.Empty);
+
+            if (selectedFilter.Contains("OSSZESTERMEK", StringComparison.Ordinal))
+            {
+                return StatusBulkFilter.AllProducts;
+            }
+
+            if (selectedFilter.Contains("NINCSRAKTARON", StringComparison.Ordinal))
+            {
+                return StatusBulkFilter.OutOfStock;
+            }
+
+            return StatusBulkFilter.ByCategory;
+        }
+
+        private StatusBulkTargetState GetSelectedStatusBulkTargetState()
+        {
+            string selectedStatus = NormalizeToken(statusValueComboBox.SelectedItem?.ToString() ?? string.Empty);
+            return selectedStatus.Contains("INAKTIV", StringComparison.Ordinal)
+                ? StatusBulkTargetState.Inactive
+                : StatusBulkTargetState.Active;
+        }
+
+        private string GetSelectedStatusFilterSummary()
+        {
+            StatusBulkFilter selectedFilter = GetSelectedStatusBulkFilter();
+
+            return selectedFilter switch
+            {
+                StatusBulkFilter.AllProducts => "Osszes termek",
+                StatusBulkFilter.OutOfStock => "Nincs raktaron",
+                _ => statusCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Adott kategoria"
+            };
         }
 
         private int LayoutFooter(int contentWidth, int y)
@@ -1584,6 +1921,7 @@ namespace WinFormsApp1
 
                 loadedProductsBySku.Clear();
                 loadedCategoryIdsByProductBvin.Clear();
+                loadedInventoriesByProductBvin.Clear();
 
                 foreach (HotcakesProduct product in products)
                 {
@@ -3001,6 +3339,7 @@ namespace WinFormsApp1
             };
 
             await hotcakesClient.UpsertProductInventoryAsync(inventory);
+            loadedInventoriesByProductBvin.Remove(product.Bvin);
         }
 
         private static List<ProductImportRow> ParseProductImportRows(WorksheetTable productTable)
@@ -4030,6 +4369,19 @@ namespace WinFormsApp1
             PercentChange,
             FixedDelta,
             SetAbsolutePrice
+        }
+
+        private enum StatusBulkFilter
+        {
+            ByCategory,
+            AllProducts,
+            OutOfStock
+        }
+
+        private enum StatusBulkTargetState
+        {
+            Active,
+            Inactive
         }
 
         private enum ExistingProductImportMode
