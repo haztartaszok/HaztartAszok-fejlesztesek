@@ -66,6 +66,7 @@ namespace WinFormsApp1
             affectedProductsLabel = new Label();
             statusValueComboBox = new ComboBox();
             statusValueLabel = new Label();
+            statusCategoryComboBox = new ComboBox();
             statusFilterComboBox = new ComboBox();
             statusFilterLabel = new Label();
             statusDescriptionLabel = new Label();
@@ -449,6 +450,7 @@ namespace WinFormsApp1
             statusGroupBox.Controls.Add(affectedProductsLabel);
             statusGroupBox.Controls.Add(statusValueComboBox);
             statusGroupBox.Controls.Add(statusValueLabel);
+            statusGroupBox.Controls.Add(statusCategoryComboBox);
             statusGroupBox.Controls.Add(statusFilterComboBox);
             statusGroupBox.Controls.Add(statusFilterLabel);
             statusGroupBox.Controls.Add(statusDescriptionLabel);
@@ -497,7 +499,7 @@ namespace WinFormsApp1
             statusValueComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             statusValueComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             statusValueComboBox.FormattingEnabled = true;
-            statusValueComboBox.Items.AddRange(new object[] { "Aktiv", "Inaktiv", "Piszkozat" });
+            statusValueComboBox.Items.AddRange(new object[] { "Aktiv", "Inaktiv" });
             statusValueComboBox.Location = new Point(30, 211);
             statusValueComboBox.Margin = new Padding(4);
             statusValueComboBox.Name = "statusValueComboBox";
@@ -513,6 +515,18 @@ namespace WinFormsApp1
             statusValueLabel.Size = new Size(88, 25);
             statusValueLabel.TabIndex = 3;
             statusValueLabel.Text = "Új státusz";
+            // 
+            // statusCategoryComboBox
+            // 
+            statusCategoryComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            statusCategoryComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            statusCategoryComboBox.FormattingEnabled = true;
+            statusCategoryComboBox.Location = new Point(304, 135);
+            statusCategoryComboBox.Margin = new Padding(4);
+            statusCategoryComboBox.Name = "statusCategoryComboBox";
+            statusCategoryComboBox.Size = new Size(320, 33);
+            statusCategoryComboBox.TabIndex = 8;
+            statusCategoryComboBox.Visible = false;
             // 
             // statusFilterComboBox
             // 
@@ -875,6 +889,7 @@ namespace WinFormsApp1
         private Label affectedProductsLabel;
         private ComboBox statusValueComboBox;
         private Label statusValueLabel;
+        private ComboBox statusCategoryComboBox;
         private ComboBox statusFilterComboBox;
         private Label statusFilterLabel;
         private Label statusDescriptionLabel;

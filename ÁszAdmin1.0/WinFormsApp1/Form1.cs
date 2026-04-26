@@ -53,6 +53,7 @@ namespace WinFormsApp1
             SablonButton.Click += SablonButton_Click;
             sheetComboBox.SelectedIndexChanged += SheetComboBox_SelectedIndexChanged;
             importTypeComboBox.SelectedIndexChanged += ImportTypeComboBox_SelectedIndexChanged;
+            statusFilterComboBox.SelectedIndexChanged += StatusFilterComboBox_SelectedIndexChanged;
             validateButton.Click += ValidateButton_Click;
             importButton.Click += ImportButton_Click;
             historyButton.Click += HistoryButton_Click;
@@ -90,6 +91,7 @@ namespace WinFormsApp1
             sheetComboBox.Items.Clear();
             sheetComboBox.Enabled = false;
             ClearPreviewGrid();
+            UpdateStatusCategoryFilterUI();
             SetStatusMessage("Valassz import fajlt az indulashoz.");
         }
 
@@ -286,9 +288,14 @@ namespace WinFormsApp1
             List<object> targetItems = [new CategoryComboItem("Valasszon...", null, null)];
             targetItems.AddRange(categoryItems);
 
+            List<object> statusItems = [new CategoryComboItem("Valasszon kategoriat...", null, null)];
+            statusItems.AddRange(categoryItems);
+
             ReplaceComboBoxItems(priceCategoryComboBox, priceItems, 0);
             ReplaceComboBoxItems(sourceCategoryComboBox, categoryItems.Cast<object>().ToList(), categoryItems.Count > 0 ? 0 : -1);
             ReplaceComboBoxItems(targetCategoryComboBox, targetItems, 0);
+            ReplaceComboBoxItems(statusCategoryComboBox, statusItems, 0);
+            UpdateStatusCategoryFilterUI();
         }
 
         private static void ReplaceComboBoxItems(ComboBox comboBox, List<object> items, int selectedIndex)
@@ -679,14 +686,59 @@ namespace WinFormsApp1
 
                 priceGroupBox.SetBounds(PageMargin, y, cardWidth, BulkCardHeight);
                 statusGroupBox.SetBounds(rightColumnX, y, cardWidth, BulkCardHeight);
+                LayoutStatusFilterControls();
 
                 return Math.Max(priceGroupBox.Bottom, statusGroupBox.Bottom) + SectionSpacing;
             }
 
             priceGroupBox.SetBounds(PageMargin, y, contentWidth, BulkCardHeight);
             statusGroupBox.SetBounds(PageMargin, priceGroupBox.Bottom + CardSpacing, contentWidth, BulkCardHeight);
+            LayoutStatusFilterControls();
 
             return statusGroupBox.Bottom + SectionSpacing;
+        }
+
+        private void StatusFilterComboBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            UpdateStatusCategoryFilterUI();
+        }
+
+        private void UpdateStatusCategoryFilterUI()
+        {
+            bool showCategorySelector = IsStatusCategoryFilterSelected();
+            bool hasRealCategories = loadedCategories.Count > 0;
+
+            statusCategoryComboBox.Visible = showCategorySelector;
+            statusCategoryComboBox.Enabled = showCategorySelector && hasRealCategories;
+            LayoutStatusFilterControls();
+        }
+
+        private bool IsStatusCategoryFilterSelected()
+        {
+            string selectedFilter = NormalizeToken(statusFilterComboBox.SelectedItem?.ToString() ?? string.Empty);
+            return selectedFilter.Contains("ADOTTKATEGORIA", StringComparison.Ordinal);
+        }
+
+        private void LayoutStatusFilterControls()
+        {
+            const int left = 30;
+            const int right = 30;
+            const int top = 135;
+            const int gap = 12;
+
+            int contentWidth = Math.Max(220, statusGroupBox.ClientSize.Width - left - right);
+
+            if (statusCategoryComboBox.Visible)
+            {
+                int filterWidth = Math.Max(190, (contentWidth - gap) / 2);
+                int categoryWidth = Math.Max(190, contentWidth - filterWidth - gap);
+
+                statusFilterComboBox.SetBounds(left, top, filterWidth, statusFilterComboBox.Height);
+                statusCategoryComboBox.SetBounds(statusFilterComboBox.Right + gap, top, categoryWidth, statusCategoryComboBox.Height);
+                return;
+            }
+
+            statusFilterComboBox.SetBounds(left, top, contentWidth, statusFilterComboBox.Height);
         }
 
         private int LayoutFooter(int contentWidth, int y)
