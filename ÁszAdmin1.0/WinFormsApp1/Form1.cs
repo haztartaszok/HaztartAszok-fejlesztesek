@@ -162,8 +162,8 @@ namespace WinFormsApp1
             footerPanel.Visible = isImportPage;
             priceGroupBox.Visible = !isImportPage;
             statusGroupBox.Visible = !isImportPage;
-            categoryGroupBox.Visible = !isImportPage;
-            deleteGroupBox.Visible = !isImportPage;
+            categoryGroupBox.Visible = false;
+            deleteGroupBox.Visible = false;
             bulkTitleLabel.Visible = false;
         }
 
@@ -676,22 +676,17 @@ namespace WinFormsApp1
             {
                 int cardWidth = (contentWidth - CardSpacing) / 2;
                 int rightColumnX = PageMargin + cardWidth + CardSpacing;
-                int secondRowY = y + BulkCardHeight + CardSpacing;
 
                 priceGroupBox.SetBounds(PageMargin, y, cardWidth, BulkCardHeight);
                 statusGroupBox.SetBounds(rightColumnX, y, cardWidth, BulkCardHeight);
-                categoryGroupBox.SetBounds(PageMargin, secondRowY, cardWidth, BulkCardHeight);
-                deleteGroupBox.SetBounds(rightColumnX, secondRowY, cardWidth, BulkCardHeight);
 
-                return deleteGroupBox.Bottom + SectionSpacing;
+                return Math.Max(priceGroupBox.Bottom, statusGroupBox.Bottom) + SectionSpacing;
             }
 
             priceGroupBox.SetBounds(PageMargin, y, contentWidth, BulkCardHeight);
             statusGroupBox.SetBounds(PageMargin, priceGroupBox.Bottom + CardSpacing, contentWidth, BulkCardHeight);
-            categoryGroupBox.SetBounds(PageMargin, statusGroupBox.Bottom + CardSpacing, contentWidth, BulkCardHeight);
-            deleteGroupBox.SetBounds(PageMargin, categoryGroupBox.Bottom + CardSpacing, contentWidth, BulkCardHeight);
 
-            return deleteGroupBox.Bottom + SectionSpacing;
+            return statusGroupBox.Bottom + SectionSpacing;
         }
 
         private int LayoutFooter(int contentWidth, int y)
