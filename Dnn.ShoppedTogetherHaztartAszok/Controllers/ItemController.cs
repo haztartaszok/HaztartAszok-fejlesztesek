@@ -268,8 +268,20 @@ namespace ShoppedTogetherHaztartAszok.Dnn.Dnn.ShoppedTogetherHaztartAszok.Contro
 
             if (cartProductIds.Any())
             {
-                recommendedIds = recommendationService
+                var relatedIds = recommendationService
                     .GetTopRecommendedProductIds(cartProductIds, 5)
+                    .ToList();
+
+                var fallbackIds = recommendationService
+                    .GetTopSellingProductIds(20)
+                    .Where(id => !cartProductIds.Contains(id))
+                    .Where(id => !relatedIds.Contains(id))
+                    .ToList();
+
+                recommendedIds = relatedIds
+                    .Concat(fallbackIds)
+                    .Distinct()
+                    .Take(5)
                     .ToList();
             }
             else

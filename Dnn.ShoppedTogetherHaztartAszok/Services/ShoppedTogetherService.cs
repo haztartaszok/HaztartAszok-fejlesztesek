@@ -217,6 +217,8 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
 
                 var pairCounts = new Dictionary<string, int>();
 
+                var successfullyProcessedOrderIds = new List<int>();
+
                 foreach (var order in placedOrders)
                 {
                     var productIdsInOrder = lineItemRepo.Find("WHERE OrderBvin = @0", order.bvin)
@@ -226,6 +228,13 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                         .Distinct()
                         .OrderBy(id => id)
                         .ToList();
+
+                    if (productIdsInOrder.Count < 2)
+                    {
+                        continue;
+                    }
+
+                    successfullyProcessedOrderIds.Add((int)order.Id);
 
                     for (int i = 0; i < productIdsInOrder.Count; i++)
                     {
@@ -282,9 +291,9 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                     }
                 }
 
-                if (placedOrders.Any())
+                if (successfullyProcessedOrderIds.Any())
                 {
-                    var lastOrderId = placedOrders.Max(o => o.Id);
+                    var lastOrderId = successfullyProcessedOrderIds.Max();
 
                     ctx.GetRepository<ShoppedTogetherSyncRun>().Insert(
                         new ShoppedTogetherSyncRun
@@ -292,8 +301,8 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
                             StartedOnUtc = DateTime.UtcNow,
                             FinishedOnUtc = DateTime.UtcNow,
                             WasSuccessful = true,
-                            LastProcessedOrderId = (int)lastOrderId,
-                            ProcessedOrdersCount = placedOrders.Count
+                            LastProcessedOrderId = lastOrderId,
+                            ProcessedOrdersCount = successfullyProcessedOrderIds.Count
                         });
                 }
             }
