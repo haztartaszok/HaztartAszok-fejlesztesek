@@ -1,4 +1,4 @@
-@Model ShoppedTogetherHaztartasok.Dnn.Models.RecommendedProductViewModel
+@inherits DotNetNuke.Web.Mvc.Framework.DnnWebViewPage<ShoppedTogetherHaztartasok.Dnn.Models.RecommendedProductViewModel>
 @{
     var hasCustomText = !string.IsNullOrWhiteSpace(Model.CustomPriceText);
     var actionRequiresDetails = Model.HasOptions || Model.IsGiftCard || Model.IsBundle || Model.IsUserSuppliedPrice || Model.AllowUpcharge;
