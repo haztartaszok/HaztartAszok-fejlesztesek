@@ -1,9 +1,10 @@
-@model ShoppedTogetherHaztartasok.Dnn.Models.RecommendedProductViewModel
+@Model ShoppedTogetherHaztartasok.Dnn.Models.RecommendedProductViewModel
 @{
     var hasCustomText = !string.IsNullOrWhiteSpace(Model.CustomPriceText);
     var actionRequiresDetails = Model.HasOptions || Model.IsGiftCard || Model.IsBundle || Model.IsUserSuppliedPrice || Model.AllowUpcharge;
-    var viewText = "Részletek";
-    var addToCartText = "Kosárba";
+    var viewText = "R\u00E9szletek";
+    var addToCartText = "Kos\u00E1rba";
+    var wishListLabel = actionRequiresDetails ? "Opci\u00F3k kiv\u00E1laszt\u00E1sa a kedvencekhez" : "Hozz\u00E1ad\u00E1s a kedvencekhez";
 }
 
 <div class="panel panel-default" style="position: relative;">
@@ -11,7 +12,7 @@
     @if (Model.IsOnSale)
     {
         <div style="position: absolute; top: 10px; left: 10px; background-color: #d9534f; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; z-index: 10;">
-            Akció!
+            Akci&oacute;!
         </div>
     }
 
@@ -32,20 +33,14 @@
             </a>
         </div>
     </div>
-    <div class="text-details">
-        @if (hasCustomText)
-        {
+    @if (hasCustomText)
+    {
+        <div class="text-details">
             <div class="hc-custom-price-badge">
                 @Model.CustomPriceText
             </div>
-        }
-        else
-        {
-            <div class="hc-custom-price-badge white">
-                padding
-            </div>
-        }
-    </div>
+        </div>
+    }
     <div class="panel-footer text-center">
         <div class="product-price">
             @if (Model.IsOnSale)
@@ -59,29 +54,53 @@
             }
             else if (!string.IsNullOrWhiteSpace(Model.SitePriceText))
             {
-                <span class="regular-price" style="font-weight: bold; font-size: 1.1em;">
+                <span class="regular-price">
                     @Model.SitePriceText
                 </span>
             }
         </div>
 
-        @if (actionRequiresDetails)
-        {
-            <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
-                <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
-            </a>
-        }
-        else if (!string.IsNullOrWhiteSpace(Model.AddToCartUrl))
-        {
-            <a href="@Model.AddToCartUrl" class="add-to-cart-product btn btn-primary">
-                <span><em class="glyphicon glyphicon-shopping-cart"></em>@addToCartText</span>
-            </a>
-        }
-        else
-        {
-            <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
-                <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
-            </a>
-        }
+        <div class="product-card-actions">
+            @if (actionRequiresDetails)
+            {
+                <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
+                    <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
+                </a>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.AddToCartUrl))
+            {
+                <a href="@Model.AddToCartUrl" class="add-to-cart-product btn btn-primary">
+                    <span><em class="glyphicon glyphicon-shopping-cart"></em>@addToCartText</span>
+                </a>
+            }
+            else
+            {
+                <a class="add-to-cart-product btn btn-default" href="@Model.ProductUrl">
+                    <span><em class="glyphicon glyphicon-eye-open"></em>@viewText</span>
+                </a>
+            }
+
+            @if (actionRequiresDetails)
+            {
+                <a href="@Model.ProductUrl"
+                   class="product-card-wishlist btn btn-default"
+                   aria-label="@wishListLabel"
+                   title="@wishListLabel">
+                    <span class="glyphicon glyphicon-heart"></span>
+                </a>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.Bvin))
+            {
+                <a href="@Model.ProductUrl"
+                   class="product-card-wishlist btn btn-default"
+                   data-wishlist-product-link="@Model.ProductUrl"
+                   data-wishlist-product-bvin="@Model.Bvin"
+                   data-wishlist-qty="1"
+                   aria-label="@wishListLabel"
+                   title="@wishListLabel">
+                    <span class="glyphicon glyphicon-heart"></span>
+                </a>
+            }
+        </div>
     </div>
 </div>

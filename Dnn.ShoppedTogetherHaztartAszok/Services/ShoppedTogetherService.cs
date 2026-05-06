@@ -310,6 +310,8 @@ namespace ShoppedTogetherHaztartasok.Dnn.Services
 
         public void RunIncrementalSync()
         {
+            System.Threading.Thread.Sleep(15000);
+
             var lastRun = GetLastSuccessfulSyncRun();
 
             if (lastRun == null)
