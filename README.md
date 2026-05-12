@@ -386,8 +386,6 @@ A telepítőscript támogatja a kódszignálást is. A részletek a `SIGNING.md`
 |- installer/
 |  \- AszAdmin1.iss
 |- build-installer.ps1
-|- SIGNING.md
-|- logo.ico
 \- ÁszAdmin1.0.slnx
 ```
 
