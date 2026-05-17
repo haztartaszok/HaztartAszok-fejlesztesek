@@ -279,6 +279,21 @@ namespace WinFormsApp1
                 cancellationToken);
         }
 
+        public Task<bool> RemoveCategoryProductAssociationAsync(
+            string productBvin,
+            string categoryBvin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+            ArgumentException.ThrowIfNullOrWhiteSpace(categoryBvin);
+
+            return DeleteContentAsync(
+                $"categoryproductassociations/{Uri.EscapeDataString(productBvin.Trim())}/{Uri.EscapeDataString(categoryBvin.Trim())}",
+                null,
+                static () => false,
+                cancellationToken);
+        }
+
         public Task<bool> AddPropertyToProductTypeAsync(
             string productTypeBvin,
             long propertyId,
@@ -532,6 +547,22 @@ namespace WinFormsApp1
                 null,
                 cancellationToken,
                 allowApiErrors);
+        }
+
+        private async Task<TResponse> DeleteContentAsync<TResponse>(
+            string relativePath,
+            IReadOnlyDictionary<string, string?>? queryParameters,
+            Func<TResponse> emptyFactory,
+            CancellationToken cancellationToken)
+        {
+            HotcakesApiResponse<TResponse> response = await SendAsync<object?, TResponse>(
+                HttpMethod.Delete,
+                relativePath,
+                queryParameters,
+                null,
+                cancellationToken);
+
+            return response.Content ?? emptyFactory();
         }
 
         private async Task<HotcakesApiResponse<TResponse>> SendAsync<TRequest, TResponse>(

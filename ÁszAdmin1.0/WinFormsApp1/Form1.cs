@@ -65,6 +65,7 @@ namespace WinFormsApp1
             ConfigureImportStatusLabel();
             ConfigureNavigationBar();
             ConfigureBrandHeader();
+            ConfigureCategoryManagerPage();
             ApplyVisualTheme();
             InitializeSelections();
 
@@ -136,15 +137,18 @@ namespace WinFormsApp1
             navigationPanel.Dock = DockStyle.Top;
             navigationPanel.Height = NavigationBarHeight;
             navigationPanel.TabStop = false;
+            ConfigureNavigationButton(categoryManagerPageButton, "Kategória kezelő");
 
             ConfigureNavigationButton(importPageButton, "Importálás");
             ConfigureNavigationButton(bulkOperationsPageButton, "Tömeges műveletek");
 
             importPageButton.Click += (_, _) => SetCurrentPage(FormPage.Import);
             bulkOperationsPageButton.Click += (_, _) => SetCurrentPage(FormPage.BulkOperations);
+            categoryManagerPageButton.Click += (_, _) => SetCurrentPage(FormPage.CategoryManager);
 
             navigationPanel.Controls.Add(importPageButton);
             navigationPanel.Controls.Add(bulkOperationsPageButton);
+            navigationPanel.Controls.Add(categoryManagerPageButton);
             Controls.Add(navigationPanel);
             navigationPanel.BringToFront();
 
@@ -233,11 +237,12 @@ namespace WinFormsApp1
             optionsGroupBox.Visible = isImportPage;
             previewGroupBox.Visible = isImportPage;
             footerPanel.Visible = isImportPage;
-            priceGroupBox.Visible = !isImportPage;
-            statusGroupBox.Visible = !isImportPage;
+            priceGroupBox.Visible = currentPage == FormPage.BulkOperations;
+            statusGroupBox.Visible = currentPage == FormPage.BulkOperations;
             categoryGroupBox.Visible = false;
             deleteGroupBox.Visible = false;
             bulkTitleLabel.Visible = false;
+            categoryManagerPanel.Visible = currentPage == FormPage.CategoryManager;
             UpdateHeaderText();
         }
 
@@ -245,6 +250,7 @@ namespace WinFormsApp1
         {
             StyleNavigationButton(importPageButton, currentPage == FormPage.Import);
             StyleNavigationButton(bulkOperationsPageButton, currentPage == FormPage.BulkOperations);
+            StyleNavigationButton(categoryManagerPageButton, currentPage == FormPage.CategoryManager);
         }
 
         private static void StyleNavigationButton(Button button, bool isActive)
@@ -343,6 +349,7 @@ namespace WinFormsApp1
             label1.ForeColor = MutedInkColor;
             footerPanel.BackColor = Color.Transparent;
             ConfigurePreviewGridTheme();
+            ApplyCategoryManagerTheme();
         }
 
         private void ConfigureSurfaceGroupBox(GroupBox groupBox)
@@ -654,6 +661,7 @@ namespace WinFormsApp1
             ReplaceComboBoxItems(sourceCategoryComboBox, categoryItems.Cast<object>().ToList(), categoryItems.Count > 0 ? 0 : -1);
             ReplaceComboBoxItems(targetCategoryComboBox, targetItems, 0);
             ReplaceComboBoxItems(statusCategoryComboBox, statusItems, 0);
+            PopulateCategoryManagerSelectors(categoryItems);
 
             if (currentPage == FormPage.BulkOperations)
             {
@@ -860,6 +868,7 @@ namespace WinFormsApp1
             importButton.Enabled = hotcakesReady && !isBusy && lastValidationResult?.CanProceed == true;
             priceActionButton.Enabled = hotcakesReady && !isBusy;
             statusActionButton.Enabled = hotcakesReady && !isBusy;
+            UpdateCategoryManagerActionStates(isBusy);
         }
 
         private void UpdateResponsiveLayout()
@@ -877,6 +886,7 @@ namespace WinFormsApp1
             previewGroupBox.SuspendLayout();
             priceGroupBox.SuspendLayout();
             statusGroupBox.SuspendLayout();
+            categoryManagerPanel.SuspendLayout();
             categoryGroupBox.SuspendLayout();
             deleteGroupBox.SuspendLayout();
             footerPanel.SuspendLayout();
@@ -895,9 +905,13 @@ namespace WinFormsApp1
                     currentY = LayoutPreviewSection(contentWidth, currentY);
                     currentY = LayoutFooter(contentWidth, currentY);
                 }
-                else
+                else if (currentPage == FormPage.BulkOperations)
                 {
                     currentY = LayoutBulkSections(contentWidth, currentY);
+                }
+                else
+                {
+                    currentY = LayoutCategoryManagerSection(contentWidth, currentY);
                 }
 
                 AutoScrollMinSize = new Size(0, currentY + PageMargin);
@@ -909,6 +923,7 @@ namespace WinFormsApp1
                 categoryGroupBox.ResumeLayout();
                 statusGroupBox.ResumeLayout();
                 priceGroupBox.ResumeLayout();
+                categoryManagerPanel.ResumeLayout();
                 previewGroupBox.ResumeLayout();
                 optionsGroupBox.ResumeLayout();
                 fileGroupBox.ResumeLayout();
@@ -942,6 +957,7 @@ namespace WinFormsApp1
             const int topPadding = 8;
             const int importButtonWidth = 150;
             const int bulkButtonWidth = 230;
+            const int categoryButtonWidth = 210;
 
             navigationPanel.Height = NavigationBarHeight;
             importPageButton.SetBounds(PageMargin, topPadding, importButtonWidth, NavigationButtonHeight);
@@ -949,6 +965,11 @@ namespace WinFormsApp1
                 importPageButton.Right + NavigationButtonGap,
                 topPadding,
                 bulkButtonWidth,
+                NavigationButtonHeight);
+            categoryManagerPageButton.SetBounds(
+                bulkOperationsPageButton.Right + NavigationButtonGap,
+                topPadding,
+                categoryButtonWidth,
                 NavigationButtonHeight);
         }
 
@@ -4936,7 +4957,8 @@ namespace WinFormsApp1
         private enum FormPage
         {
             Import,
-            BulkOperations
+            BulkOperations,
+            CategoryManager
         }
 
         private sealed record WorksheetPreview(string Name, List<string[]> Rows);
