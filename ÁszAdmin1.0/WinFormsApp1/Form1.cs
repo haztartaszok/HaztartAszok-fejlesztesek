@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Drawing.Drawing2D;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
@@ -10,13 +11,23 @@ namespace WinFormsApp1
         private const int PageMargin = 24;
         private const int SectionSpacing = 16;
         private const int CardSpacing = 16;
-        private const int BulkCardHeight = 380;
+        private const int BulkCardHeight = 420;
         private const int MinimumContentWidth = 760;
         private const int NavigationBarHeight = 56;
         private const int NavigationButtonHeight = 40;
         private const int NavigationButtonGap = 10;
         private const int StatusLabelHeight = 36;
+        private const int HeaderPanelHeight = 124;
         private const string DefaultHotcakesCultureCode = "en-US";
+        private static readonly Color AppBackgroundColor = Color.FromArgb(250, 244, 232);
+        private static readonly Color SurfaceColor = Color.FromArgb(255, 251, 242);
+        private static readonly Color SurfaceStrongColor = Color.FromArgb(255, 248, 234);
+        private static readonly Color BorderColor = Color.FromArgb(218, 200, 170);
+        private static readonly Color InkColor = Color.FromArgb(52, 71, 78);
+        private static readonly Color MutedInkColor = Color.FromArgb(105, 126, 133);
+        private static readonly Color AccentCoralColor = Color.FromArgb(227, 106, 106);
+        private static readonly Color AccentBlueColor = Color.FromArgb(90, 156, 181);
+        private static readonly Color AccentCreamColor = Color.FromArgb(253, 242, 210);
         private readonly List<WorksheetPreview> loadedWorkbookSheets = [];
         private readonly List<HotcakesCategorySnapshot> loadedCategories = [];
         private readonly List<HotcakesProductTypeSnapshot> loadedProductTypes = [];
@@ -32,6 +43,10 @@ namespace WinFormsApp1
         private readonly HotcakesApiClient hotcakesClient;
         private readonly ImportHistoryStore importHistoryStore = new();
         private readonly Panel navigationPanel = new();
+        private readonly Panel headerPanel = new();
+        private readonly PictureBox brandPictureBox = new();
+        private readonly Label subtitleLabel = new();
+        private readonly Label accentBadgeLabel = new();
         private readonly Button importPageButton = new();
         private readonly Button bulkOperationsPageButton = new();
         private readonly Label importStatusLabel = new();
@@ -49,6 +64,8 @@ namespace WinFormsApp1
             hotcakesClient = new HotcakesApiClient(AppSettings.Current.Hotcakes);
             ConfigureImportStatusLabel();
             ConfigureNavigationBar();
+            ConfigureBrandHeader();
+            ApplyVisualTheme();
             InitializeSelections();
 
             browseButton.Click += BrowseButton_Click;
@@ -106,7 +123,8 @@ namespace WinFormsApp1
         private void ConfigureImportStatusLabel()
         {
             importStatusLabel.AutoEllipsis = true;
-            importStatusLabel.ForeColor = Color.DimGray;
+            importStatusLabel.Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
+            importStatusLabel.ForeColor = MutedInkColor;
             importStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
             importStatusLabel.Text = "Hotcakes kapcsolat elokeszitese...";
             footerPanel.Controls.Add(importStatusLabel);
@@ -114,13 +132,13 @@ namespace WinFormsApp1
 
         private void ConfigureNavigationBar()
         {
-            navigationPanel.BackColor = Color.Black;
+            navigationPanel.BackColor = Color.FromArgb(34, 58, 68);
             navigationPanel.Dock = DockStyle.Top;
             navigationPanel.Height = NavigationBarHeight;
             navigationPanel.TabStop = false;
 
-            ConfigureNavigationButton(importPageButton, "Importalas");
-            ConfigureNavigationButton(bulkOperationsPageButton, "Tomeges muveletek");
+            ConfigureNavigationButton(importPageButton, "Importálás");
+            ConfigureNavigationButton(bulkOperationsPageButton, "Tömeges műveletek");
 
             importPageButton.Click += (_, _) => SetCurrentPage(FormPage.Import);
             bulkOperationsPageButton.Click += (_, _) => SetCurrentPage(FormPage.BulkOperations);
@@ -134,12 +152,51 @@ namespace WinFormsApp1
             UpdateNavigationState();
         }
 
+        private void ConfigureBrandHeader()
+        {
+            headerPanel.BackColor = Color.Transparent;
+            headerPanel.TabStop = false;
+            headerPanel.Paint += HeaderPanel_Paint;
+
+            brandPictureBox.BackColor = Color.Transparent;
+            brandPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+            brandPictureBox.TabStop = false;
+            brandPictureBox.Image = LoadBrandImage();
+
+            titleLabel.AutoSize = true;
+            titleLabel.BackColor = Color.Transparent;
+            titleLabel.Font = new Font("Bahnschrift SemiBold", 21F, FontStyle.Bold);
+            titleLabel.ForeColor = InkColor;
+
+            subtitleLabel.AutoSize = true;
+            subtitleLabel.BackColor = Color.Transparent;
+            subtitleLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+            subtitleLabel.ForeColor = MutedInkColor;
+
+            accentBadgeLabel.AutoSize = false;
+            accentBadgeLabel.BackColor = AccentCreamColor;
+            accentBadgeLabel.ForeColor = AccentBlueColor;
+            accentBadgeLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            accentBadgeLabel.TextAlign = ContentAlignment.MiddleCenter;
+            accentBadgeLabel.Text = "AszAdmin 1.0";
+
+            headerPanel.Controls.Add(brandPictureBox);
+            headerPanel.Controls.Add(titleLabel);
+            headerPanel.Controls.Add(subtitleLabel);
+            headerPanel.Controls.Add(accentBadgeLabel);
+            Controls.Add(headerPanel);
+            headerPanel.BringToFront();
+
+            Icon = LoadBrandIcon();
+            UpdateHeaderText();
+        }
+
         private static void ConfigureNavigationButton(Button button, string text)
         {
             button.Cursor = Cursors.Hand;
             button.FlatAppearance.BorderSize = 0;
-            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(56, 56, 56);
-            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(36, 36, 36);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(76, 114, 129);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(61, 96, 110);
             button.FlatStyle = FlatStyle.Flat;
             button.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
             button.Margin = Padding.Empty;
@@ -171,7 +228,7 @@ namespace WinFormsApp1
         {
             bool isImportPage = currentPage == FormPage.Import;
 
-            titleLabel.Text = isImportPage ? "Importalas" : "Tomeges muveletek";
+            titleLabel.Text = isImportPage ? "Importálás" : "Tömeges műveletek";
             fileGroupBox.Visible = isImportPage;
             optionsGroupBox.Visible = isImportPage;
             previewGroupBox.Visible = isImportPage;
@@ -181,6 +238,7 @@ namespace WinFormsApp1
             categoryGroupBox.Visible = false;
             deleteGroupBox.Visible = false;
             bulkTitleLabel.Visible = false;
+            UpdateHeaderText();
         }
 
         private void UpdateNavigationState()
@@ -191,14 +249,294 @@ namespace WinFormsApp1
 
         private static void StyleNavigationButton(Button button, bool isActive)
         {
-            button.BackColor = isActive ? Color.White : Color.Black;
-            button.ForeColor = isActive ? Color.Black : Color.White;
+            button.BackColor = isActive ? AccentCreamColor : Color.Transparent;
+            button.ForeColor = isActive ? InkColor : Color.FromArgb(239, 243, 244);
         }
 
         private void SetStatusMessage(string message, bool isError = false)
         {
             importStatusLabel.Text = message;
-            importStatusLabel.ForeColor = isError ? Color.Firebrick : Color.DimGray;
+            importStatusLabel.ForeColor = isError ? AccentCoralColor : MutedInkColor;
+        }
+
+        private void ApplyVisualTheme()
+        {
+            BackColor = AppBackgroundColor;
+            ForeColor = InkColor;
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+            DoubleBuffered = true;
+
+            foreach (GroupBox groupBox in new[] { fileGroupBox, optionsGroupBox, previewGroupBox, priceGroupBox, statusGroupBox, categoryGroupBox, deleteGroupBox })
+            {
+                ConfigureSurfaceGroupBox(groupBox);
+            }
+
+            foreach (Button button in new[] { SablonButton, browseButton, historyButton, validateButton, categoryActionButton, deleteActionButton })
+            {
+                StyleSecondaryButton(button);
+            }
+
+            foreach (Button button in new[] { importButton, priceActionButton, statusActionButton })
+            {
+                StylePrimaryButton(button);
+            }
+
+            foreach (ComboBox comboBox in new[]
+            {
+                sheetComboBox,
+                existingItemModeComboBox,
+                importTypeComboBox,
+                priceCategoryComboBox,
+                priceModeComboBox,
+                statusCategoryComboBox,
+                statusFilterComboBox,
+                statusValueComboBox,
+                sourceCategoryComboBox,
+                targetCategoryComboBox,
+                deleteConditionComboBox
+            })
+            {
+                StyleComboBox(comboBox);
+            }
+
+            foreach (TextBox textBox in new[] { filePathTextBox, priceValueTextBox })
+            {
+                StyleTextBox(textBox);
+            }
+
+            foreach (Label label in new[]
+            {
+                filePathLabel,
+                sheetLabel,
+                importTypeLabel,
+                existingItemModeLabel,
+                priceValueLabel,
+                priceAffectedProductsLabel,
+                priceModeLabel,
+                priceCategoryLabel,
+                priceDescriptionLabel,
+                affectedProductsLabel,
+                statusValueLabel,
+                statusFilterLabel,
+                statusDescriptionLabel,
+                sourceCategoryLabel,
+                targetCategoryLabel,
+                categoryDescriptionLabel,
+                moveCountLabel,
+                deleteDescriptionLabel,
+                deleteConditionLabel,
+                deleteWarningLabel,
+                deleteWarningValueLabel,
+                label1
+            })
+            {
+                label.ForeColor = InkColor;
+            }
+
+            foreach (Label label in new[] { priceAffectedProductsValueLabel, affectedProductsValueLabel, moveCountValueLabel })
+            {
+                label.ForeColor = AccentBlueColor;
+                label.Font = new Font("Bahnschrift SemiBold", 16F, FontStyle.Bold);
+            }
+
+            deleteWarningLabel.ForeColor = AccentCoralColor;
+            label1.ForeColor = MutedInkColor;
+            footerPanel.BackColor = Color.Transparent;
+            ConfigurePreviewGridTheme();
+        }
+
+        private void ConfigureSurfaceGroupBox(GroupBox groupBox)
+        {
+            groupBox.BackColor = SurfaceColor;
+            groupBox.ForeColor = AccentBlueColor;
+            groupBox.Padding = new Padding(20, 18, 20, 20);
+            groupBox.Paint -= SurfaceGroupBox_Paint;
+            groupBox.Paint += SurfaceGroupBox_Paint;
+        }
+
+        private void ConfigurePreviewGridTheme()
+        {
+            previewDataGridView.BackgroundColor = SurfaceStrongColor;
+            previewDataGridView.BorderStyle = BorderStyle.None;
+            previewDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            previewDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            previewDataGridView.EnableHeadersVisualStyles = false;
+            previewDataGridView.GridColor = BorderColor;
+            previewDataGridView.RowTemplate.Height = 34;
+            previewDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            previewDataGridView.DefaultCellStyle.BackColor = SurfaceColor;
+            previewDataGridView.DefaultCellStyle.ForeColor = InkColor;
+            previewDataGridView.DefaultCellStyle.SelectionBackColor = Color.FromArgb(227, 238, 243);
+            previewDataGridView.DefaultCellStyle.SelectionForeColor = InkColor;
+            previewDataGridView.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(255, 246, 231);
+            previewDataGridView.ColumnHeadersDefaultCellStyle.BackColor = AccentBlueColor;
+            previewDataGridView.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            previewDataGridView.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            previewDataGridView.ColumnHeadersHeight = 38;
+        }
+
+        private static void StylePrimaryButton(Button button)
+        {
+            button.BackColor = AccentCoralColor;
+            button.ForeColor = Color.White;
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(205, 91, 91);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(214, 99, 99);
+            button.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+        }
+
+        private static void StyleSecondaryButton(Button button)
+        {
+            button.BackColor = Color.White;
+            button.ForeColor = AccentBlueColor;
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = BorderColor;
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(240, 248, 250);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(247, 251, 252);
+            button.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+        }
+
+        private static void StyleTextBox(TextBox textBox)
+        {
+            textBox.BackColor = Color.White;
+            textBox.BorderStyle = BorderStyle.FixedSingle;
+            textBox.ForeColor = InkColor;
+            textBox.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+        }
+
+        private static void StyleComboBox(ComboBox comboBox)
+        {
+            comboBox.BackColor = Color.White;
+            comboBox.FlatStyle = FlatStyle.Flat;
+            comboBox.ForeColor = InkColor;
+            comboBox.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+        }
+
+        private void UpdateHeaderText()
+        {
+            if (currentPage == FormPage.Import)
+            {
+                subtitleLabel.Text = "Gyors, áttekinthető importfolyamat Hotcakes termékekhez, képekhez és tulajdonságokhoz.";
+                accentBadgeLabel.Text = "Import felület";
+                return;
+            }
+
+            subtitleLabel.Text = "Nagyobb katalógusmódosításokhoz tervezett vezérlőfelület árfrissítéshez és státuszkezeléshez.";
+            accentBadgeLabel.Text = "Tömeges mód";
+        }
+
+        private void HeaderPanel_Paint(object? sender, PaintEventArgs e)
+        {
+            Rectangle bounds = headerPanel.ClientRectangle;
+
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            using GraphicsPath path = CreateRoundedRectanglePath(Rectangle.Inflate(bounds, -1, -1), 26);
+            using LinearGradientBrush brush = new(
+                bounds,
+                Color.FromArgb(236, 247, 250),
+                Color.FromArgb(255, 247, 233),
+                LinearGradientMode.Horizontal);
+            using Pen borderPen = new(Color.FromArgb(208, 220, 224), 1.2F);
+
+            e.Graphics.FillPath(brush, path);
+            e.Graphics.DrawPath(borderPen, path);
+
+            using SolidBrush glowBrush = new(Color.FromArgb(48, AccentCoralColor));
+            e.Graphics.FillEllipse(glowBrush, bounds.Width - 160, 18, 110, 110);
+
+            using SolidBrush coolBrush = new(Color.FromArgb(42, AccentBlueColor));
+            e.Graphics.FillEllipse(coolBrush, bounds.Width - 240, 50, 90, 90);
+        }
+
+        private void SurfaceGroupBox_Paint(object? sender, PaintEventArgs e)
+        {
+            if (sender is not GroupBox groupBox)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(BackColor);
+
+            Size textSize = TextRenderer.MeasureText(groupBox.Text, groupBox.Font);
+            Rectangle cardBounds = new(1, (textSize.Height / 2) + 2, groupBox.Width - 3, groupBox.Height - textSize.Height / 2 - 4);
+
+            using GraphicsPath path = CreateRoundedRectanglePath(cardBounds, 18);
+            using SolidBrush surfaceBrush = new(SurfaceColor);
+            using Pen borderPen = new(BorderColor, 1.1F);
+
+            e.Graphics.FillPath(surfaceBrush, path);
+            e.Graphics.DrawPath(borderPen, path);
+
+            Rectangle textBackground = new(20, 0, Math.Min(groupBox.Width - 40, textSize.Width + 16), textSize.Height + 2);
+            using SolidBrush textBackgroundBrush = new(AppBackgroundColor);
+            e.Graphics.FillRectangle(textBackgroundBrush, textBackground);
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                groupBox.Text,
+                new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                new Point(textBackground.Left + 8, 0),
+                AccentBlueColor);
+        }
+
+        private static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
+        {
+            GraphicsPath path = new();
+            int diameter = radius * 2;
+            Rectangle arc = new(bounds.Location, new Size(diameter, diameter));
+
+            path.AddArc(arc, 180, 90);
+            arc.X = bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = bounds.Left;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
+
+            return path;
+        }
+
+        private static string GetBrandAssetPath()
+        {
+            return Path.Combine(AppContext.BaseDirectory, "logo.ico");
+        }
+
+        private static Icon? LoadBrandIcon()
+        {
+            string assetPath = GetBrandAssetPath();
+
+            if (!File.Exists(assetPath))
+            {
+                return null;
+            }
+
+            using Icon icon = new(assetPath);
+            return (Icon)icon.Clone();
+        }
+
+        private static Bitmap? LoadBrandImage()
+        {
+            string assetPath = GetBrandAssetPath();
+
+            if (!File.Exists(assetPath))
+            {
+                return null;
+            }
+
+            using Icon icon = new(assetPath);
+            return icon.ToBitmap();
         }
 
         private async Task InitializeHotcakesAsync()
@@ -533,6 +871,7 @@ namespace WinFormsApp1
 
             SuspendLayout();
             navigationPanel.SuspendLayout();
+            headerPanel.SuspendLayout();
             fileGroupBox.SuspendLayout();
             optionsGroupBox.SuspendLayout();
             previewGroupBox.SuspendLayout();
@@ -546,10 +885,8 @@ namespace WinFormsApp1
             {
                 LayoutNavigationBar();
                 int contentWidth = Math.Max(MinimumContentWidth, ClientSize.Width - (PageMargin * 2));
-                int currentY = navigationPanel.Bottom + 20;
-
-                titleLabel.Location = new Point(PageMargin, currentY);
-                currentY = titleLabel.Bottom + 20;
+                int currentY = navigationPanel.Bottom + 18;
+                currentY = LayoutHeader(contentWidth, currentY);
 
                 if (currentPage == FormPage.Import)
                 {
@@ -575,9 +912,29 @@ namespace WinFormsApp1
                 previewGroupBox.ResumeLayout();
                 optionsGroupBox.ResumeLayout();
                 fileGroupBox.ResumeLayout();
+                headerPanel.ResumeLayout();
                 navigationPanel.ResumeLayout();
                 ResumeLayout();
             }
+        }
+
+        private int LayoutHeader(int contentWidth, int y)
+        {
+            const int innerPadding = 26;
+            const int logoSize = 72;
+            const int badgeWidth = 132;
+            const int badgeHeight = 30;
+
+            headerPanel.SetBounds(PageMargin, y, contentWidth, HeaderPanelHeight);
+            brandPictureBox.SetBounds(innerPadding, 24, logoSize, logoSize);
+
+            int textLeft = brandPictureBox.Right + 18;
+            titleLabel.Location = new Point(textLeft, 26);
+            subtitleLabel.Location = new Point(textLeft + 2, titleLabel.Bottom + 8);
+
+            accentBadgeLabel.SetBounds(headerPanel.Width - innerPadding - badgeWidth, 24, badgeWidth, badgeHeight);
+
+            return headerPanel.Bottom + SectionSpacing;
         }
 
         private void LayoutNavigationBar()
@@ -716,6 +1073,8 @@ namespace WinFormsApp1
 
                 priceGroupBox.SetBounds(PageMargin, y, cardWidth, BulkCardHeight);
                 statusGroupBox.SetBounds(rightColumnX, y, cardWidth, BulkCardHeight);
+                LayoutPriceControls();
+                LayoutStatusControls();
                 LayoutStatusFilterControls();
 
                 return Math.Max(priceGroupBox.Bottom, statusGroupBox.Bottom) + SectionSpacing;
@@ -723,6 +1082,8 @@ namespace WinFormsApp1
 
             priceGroupBox.SetBounds(PageMargin, y, contentWidth, BulkCardHeight);
             statusGroupBox.SetBounds(PageMargin, priceGroupBox.Bottom + CardSpacing, contentWidth, BulkCardHeight);
+            LayoutPriceControls();
+            LayoutStatusControls();
             LayoutStatusFilterControls();
 
             return statusGroupBox.Bottom + SectionSpacing;
@@ -758,7 +1119,7 @@ namespace WinFormsApp1
         {
             const int left = 30;
             const int right = 30;
-            const int top = 135;
+            int top = statusFilterLabel.Bottom + 8;
             const int gap = 12;
 
             int contentWidth = Math.Max(220, statusGroupBox.ClientSize.Width - left - right);
@@ -774,6 +1135,102 @@ namespace WinFormsApp1
             }
 
             statusFilterComboBox.SetBounds(left, top, contentWidth, statusFilterComboBox.Height);
+        }
+
+        private void LayoutPriceControls()
+        {
+            const int left = 30;
+            const int right = 30;
+            const int top = 32;
+            const int sectionGap = 10;
+            const int rowGap = 6;
+            const int buttonHeight = 42;
+
+            int contentWidth = Math.Max(220, priceGroupBox.ClientSize.Width - left - right);
+            int currentY = top;
+
+            priceDescriptionLabel.MaximumSize = new Size(contentWidth, 0);
+            priceDescriptionLabel.Location = new Point(left, currentY);
+            currentY = priceDescriptionLabel.Bottom + sectionGap;
+
+            priceCategoryLabel.Location = new Point(left, currentY);
+            currentY = priceCategoryLabel.Bottom + rowGap;
+            priceCategoryComboBox.SetBounds(left, currentY, contentWidth, priceCategoryComboBox.Height);
+            currentY = priceCategoryComboBox.Bottom + sectionGap;
+
+            priceModeLabel.Location = new Point(left, currentY);
+            currentY = priceModeLabel.Bottom + rowGap;
+            priceModeComboBox.SetBounds(left, currentY, contentWidth, priceModeComboBox.Height);
+            currentY = priceModeComboBox.Bottom + sectionGap;
+
+            priceValueLabel.Location = new Point(left, currentY);
+            currentY = priceValueLabel.Bottom + rowGap;
+            priceValueTextBox.SetBounds(left, currentY, contentWidth, priceValueTextBox.Height);
+            currentY = priceValueTextBox.Bottom + 14;
+
+            int affectedRowHeight = Math.Max(priceAffectedProductsLabel.Height, priceAffectedProductsValueLabel.Height);
+            int affectedTop = currentY;
+
+            priceAffectedProductsLabel.Location = new Point(left, affectedTop);
+            priceAffectedProductsValueLabel.Location = new Point(
+                priceAffectedProductsLabel.Right + 12,
+                affectedTop - 4);
+
+            int buttonTop = Math.Max(
+                affectedTop + affectedRowHeight + 12,
+                priceGroupBox.ClientSize.Height - buttonHeight - 18);
+            priceActionButton.SetBounds(left, buttonTop, contentWidth, buttonHeight);
+        }
+
+        private void LayoutStatusControls()
+        {
+            const int left = 30;
+            const int right = 30;
+            const int top = 42;
+            const int sectionGap = 14;
+            const int rowGap = 8;
+            const int buttonHeight = 42;
+
+            int contentWidth = Math.Max(220, statusGroupBox.ClientSize.Width - left - right);
+            int currentY = top;
+
+            statusDescriptionLabel.MaximumSize = new Size(contentWidth, 0);
+            statusDescriptionLabel.Location = new Point(left, currentY);
+            currentY = statusDescriptionLabel.Bottom + sectionGap;
+
+            statusFilterLabel.Location = new Point(left, currentY);
+            currentY = statusFilterLabel.Bottom + rowGap;
+
+            int filterRowTop = currentY;
+            int filterRowHeight = statusFilterComboBox.Height;
+
+            if (statusCategoryComboBox.Visible)
+            {
+                int gap = 12;
+                int filterWidth = Math.Max(190, (contentWidth - gap) / 2);
+                int categoryWidth = Math.Max(190, contentWidth - filterWidth - gap);
+                statusFilterComboBox.SetBounds(left, filterRowTop, filterWidth, filterRowHeight);
+                statusCategoryComboBox.SetBounds(statusFilterComboBox.Right + gap, filterRowTop, categoryWidth, statusCategoryComboBox.Height);
+            }
+            else
+            {
+                statusFilterComboBox.SetBounds(left, filterRowTop, contentWidth, filterRowHeight);
+            }
+
+            currentY = statusFilterComboBox.Bottom + sectionGap;
+
+            statusValueLabel.Location = new Point(left, currentY);
+            currentY = statusValueLabel.Bottom + rowGap;
+            statusValueComboBox.SetBounds(left, currentY, contentWidth, statusValueComboBox.Height);
+            currentY = statusValueComboBox.Bottom + 16;
+
+            affectedProductsLabel.Location = new Point(left, currentY);
+            affectedProductsValueLabel.Location = new Point(
+                affectedProductsLabel.Right + 12,
+                currentY - 4);
+
+            int buttonTop = statusGroupBox.ClientSize.Height - buttonHeight - 15;
+            statusActionButton.SetBounds(left, buttonTop, contentWidth, buttonHeight);
         }
 
         private async void PriceCategoryComboBox_SelectedIndexChanged(object? sender, EventArgs e)
