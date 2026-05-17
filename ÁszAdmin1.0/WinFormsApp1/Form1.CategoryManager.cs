@@ -188,8 +188,8 @@ namespace WinFormsApp1
             StyleSecondaryButton(categoryClearFiltersButton);
             StyleSecondaryButton(categorySelectAllButton);
             StyleSecondaryButton(categoryClearSelectionButton);
-            StylePrimaryButton(categoryAddSelectedButton);
-            StyleSecondaryButton(categoryRemoveSelectedButton);
+            StyleSecondaryButton(categoryAddSelectedButton);
+            StylePrimaryButton(categoryRemoveSelectedButton);
 
             StyleTextBox(categorySkuFilterTextBox);
             StyleTextBox(categoryDetailsTextBox);

@@ -66,6 +66,7 @@ namespace WinFormsApp1
             ConfigureNavigationBar();
             ConfigureBrandHeader();
             ConfigureCategoryManagerPage();
+            ConfigureImageEditorPage();
             ApplyVisualTheme();
             InitializeSelections();
 
@@ -137,6 +138,7 @@ namespace WinFormsApp1
             navigationPanel.Dock = DockStyle.Top;
             navigationPanel.Height = NavigationBarHeight;
             navigationPanel.TabStop = false;
+            ConfigureNavigationButton(imageEditorPageButton, "Kép szerkesztő");
             ConfigureNavigationButton(categoryManagerPageButton, "Kategória kezelő");
 
             ConfigureNavigationButton(importPageButton, "Importálás");
@@ -145,10 +147,12 @@ namespace WinFormsApp1
             importPageButton.Click += (_, _) => SetCurrentPage(FormPage.Import);
             bulkOperationsPageButton.Click += (_, _) => SetCurrentPage(FormPage.BulkOperations);
             categoryManagerPageButton.Click += (_, _) => SetCurrentPage(FormPage.CategoryManager);
+            imageEditorPageButton.Click += (_, _) => SetCurrentPage(FormPage.ImageEditor);
 
             navigationPanel.Controls.Add(importPageButton);
             navigationPanel.Controls.Add(bulkOperationsPageButton);
             navigationPanel.Controls.Add(categoryManagerPageButton);
+            navigationPanel.Controls.Add(imageEditorPageButton);
             Controls.Add(navigationPanel);
             navigationPanel.BringToFront();
 
@@ -243,6 +247,7 @@ namespace WinFormsApp1
             deleteGroupBox.Visible = false;
             bulkTitleLabel.Visible = false;
             categoryManagerPanel.Visible = currentPage == FormPage.CategoryManager;
+            imageEditorPanel.Visible = currentPage == FormPage.ImageEditor;
             UpdateHeaderText();
         }
 
@@ -251,6 +256,7 @@ namespace WinFormsApp1
             StyleNavigationButton(importPageButton, currentPage == FormPage.Import);
             StyleNavigationButton(bulkOperationsPageButton, currentPage == FormPage.BulkOperations);
             StyleNavigationButton(categoryManagerPageButton, currentPage == FormPage.CategoryManager);
+            StyleNavigationButton(imageEditorPageButton, currentPage == FormPage.ImageEditor);
         }
 
         private static void StyleNavigationButton(Button button, bool isActive)
@@ -350,6 +356,7 @@ namespace WinFormsApp1
             footerPanel.BackColor = Color.Transparent;
             ConfigurePreviewGridTheme();
             ApplyCategoryManagerTheme();
+            ApplyImageEditorTheme();
         }
 
         private void ConfigureSurfaceGroupBox(GroupBox groupBox)
@@ -869,6 +876,7 @@ namespace WinFormsApp1
             priceActionButton.Enabled = hotcakesReady && !isBusy;
             statusActionButton.Enabled = hotcakesReady && !isBusy;
             UpdateCategoryManagerActionStates(isBusy);
+            UpdateImageEditorActionStates(isBusy);
         }
 
         private void UpdateResponsiveLayout()
@@ -887,6 +895,7 @@ namespace WinFormsApp1
             priceGroupBox.SuspendLayout();
             statusGroupBox.SuspendLayout();
             categoryManagerPanel.SuspendLayout();
+            imageEditorPanel.SuspendLayout();
             categoryGroupBox.SuspendLayout();
             deleteGroupBox.SuspendLayout();
             footerPanel.SuspendLayout();
@@ -909,9 +918,13 @@ namespace WinFormsApp1
                 {
                     currentY = LayoutBulkSections(contentWidth, currentY);
                 }
-                else
+                else if (currentPage == FormPage.CategoryManager)
                 {
                     currentY = LayoutCategoryManagerSection(contentWidth, currentY);
+                }
+                else
+                {
+                    currentY = LayoutImageEditorSection(contentWidth, currentY);
                 }
 
                 AutoScrollMinSize = new Size(0, currentY + PageMargin);
@@ -924,6 +937,7 @@ namespace WinFormsApp1
                 statusGroupBox.ResumeLayout();
                 priceGroupBox.ResumeLayout();
                 categoryManagerPanel.ResumeLayout();
+                imageEditorPanel.ResumeLayout();
                 previewGroupBox.ResumeLayout();
                 optionsGroupBox.ResumeLayout();
                 fileGroupBox.ResumeLayout();
@@ -958,6 +972,7 @@ namespace WinFormsApp1
             const int importButtonWidth = 150;
             const int bulkButtonWidth = 230;
             const int categoryButtonWidth = 210;
+            const int imageEditorButtonWidth = 180;
 
             navigationPanel.Height = NavigationBarHeight;
             importPageButton.SetBounds(PageMargin, topPadding, importButtonWidth, NavigationButtonHeight);
@@ -970,6 +985,11 @@ namespace WinFormsApp1
                 bulkOperationsPageButton.Right + NavigationButtonGap,
                 topPadding,
                 categoryButtonWidth,
+                NavigationButtonHeight);
+            imageEditorPageButton.SetBounds(
+                categoryManagerPageButton.Right + NavigationButtonGap,
+                topPadding,
+                imageEditorButtonWidth,
                 NavigationButtonHeight);
         }
 
@@ -4958,7 +4978,8 @@ namespace WinFormsApp1
         {
             Import,
             BulkOperations,
-            CategoryManager
+            CategoryManager,
+            ImageEditor
         }
 
         private sealed record WorksheetPreview(string Name, List<string[]> Rows);

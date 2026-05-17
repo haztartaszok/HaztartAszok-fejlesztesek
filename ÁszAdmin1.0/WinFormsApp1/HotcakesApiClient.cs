@@ -406,6 +406,19 @@ namespace WinFormsApp1
             return response.Content ?? [];
         }
 
+        public Task<bool> DeleteProductImageAsync(
+            string imageBvin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(imageBvin);
+
+            return DeleteContentAsync(
+                $"productimages/{Uri.EscapeDataString(imageBvin.Trim())}",
+                null,
+                static () => false,
+                cancellationToken);
+        }
+
         private async Task<bool> UploadProductAdditionalImageCoreAsync(
             string productBvin,
             string fileName,
