@@ -93,9 +93,27 @@ namespace WinFormsApp1
         {
             string applicationDataPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AszAdmin1.0");
+                "AszAdmin2.0");
 
-            return Path.Combine(applicationDataPath, "import-history.json");
+            string historyFilePath = Path.Combine(applicationDataPath, "import-history.json");
+
+            if (File.Exists(historyFilePath))
+            {
+                return historyFilePath;
+            }
+
+            string legacyApplicationDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "AszAdmin1.0");
+            string legacyHistoryFilePath = Path.Combine(legacyApplicationDataPath, "import-history.json");
+
+            if (File.Exists(legacyHistoryFilePath))
+            {
+                Directory.CreateDirectory(applicationDataPath);
+                File.Copy(legacyHistoryFilePath, historyFilePath, overwrite: false);
+            }
+
+            return historyFilePath;
         }
     }
 

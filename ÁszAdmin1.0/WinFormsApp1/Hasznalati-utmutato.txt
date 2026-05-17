@@ -1,0 +1,228 @@
+ÁszAdmin2.0 - Rövid használati útmutató
+=======================================
+
+Ez az útmutató azoknak készült, akik a webshop termékeit, kategóriáit és képeit
+szeretnék kezelni az ÁszAdmin2.0 alkalmazással.
+
+
+1. Mire való az alkalmazás?
+---------------------------
+Az ÁszAdmin2.0 segítségével az alábbi feladatokat lehet elvégezni:
+
+- termékek importálása Excelből
+- kategóriák hozzárendelése termékekhez
+- termékképek feltöltése és módosítása
+- terméktulajdonságok importálása
+- tömeges árfrissítés
+- tömeges aktiválás / inaktiválás
+- kategóriák tömeges kezelése
+- képek kezelése külön felületen
+
+
+2. Indítás előtt
+----------------
+Az alkalmazás csak akkor működik megfelelően, ha van kapcsolat a webshophoz.
+
+Ha indítás után nem töltődnek be a kategóriák vagy a termékek, akkor jelezni kell
+annak, aki az alkalmazást beállította.
+
+
+3. A fő fülek
+-------------
+Az alkalmazásban jelenleg 4 fő fül van:
+
+1. Importálás
+2. Tömeges műveletek
+3. Kategória kezelő
+4. Kép szerkesztő
+
+
+4. Importálás
+-------------
+Ezt a fület akkor használd, ha sok terméket vagy adatot egyszerre szeretnél
+felvinni vagy frissíteni Excelből.
+
+Mire jó?
+- új termékek felvitele
+- meglévő termékek frissítése
+- kategóriák importálása
+- képek importálása
+- terméktulajdonságok importálása
+
+Hogyan használd?
+1. Kattints a fájl kiválasztására.
+2. Tallózd be az Excel fájlt.
+3. Nézd meg az előnézetet.
+4. Kattints az ellenőrzésre / validálásra.
+5. Ha nincs hiba, indítsd el az importot.
+
+Fontos:
+- a rendszer a termékeket SKU alapján azonosítja
+- ha egy SKU hibás vagy nem létezik, az adott sor nem fog rendesen feldolgozódni
+- képeknél az azonos nevű, már létező fájlok nem kerülnek újra feltöltésre
+
+Mikor használd?
+- amikor sok termék adata egyszerre változik
+- amikor beszállítói vagy belső Excel alapján kell frissíteni
+
+
+5. Tömeges műveletek
+--------------------
+Ezt a fület akkor használd, ha sok terméken ugyanazt a műveletet szeretnéd végrehajtani.
+
+5.1 Tömeges árfrissítés
+-----------------------
+Ezzel sok termék árát lehet egyszerre módosítani.
+
+Mit lehet csinálni?
+- százalékos emelés vagy csökkentés
+- fix összegű emelés vagy csökkentés
+- teljes új ár megadása
+
+Lépések:
+1. Válaszd ki a kategóriát, vagy hagyd az összes terméken.
+2. Válaszd ki a módosítás típusát.
+3. Add meg az értéket.
+4. Nézd meg, hány terméket érint.
+5. Kattints a frissítés gombra.
+
+Példa:
+- ha 10-et írsz be százalékos módosításnál, akkor 10%-kal növeli az árat
+- ha -10-et írsz be, akkor 10%-kal csökkenti
+
+5.2 Aktiválás / Inaktiválás
+---------------------------
+Ezzel sok termék státuszát lehet egyszerre módosítani.
+
+Mire jó?
+- termékek elrejtése
+- termékek újra aktiválása
+- adott kategória gyors ki- vagy bekapcsolása
+
+Lépések:
+1. Válaszd ki a szűrést.
+2. Ha kell, válassz kategóriát.
+3. Válaszd ki az új státuszt.
+4. Ellenőrizd az érintett termékek számát.
+5. Kattints a művelet gombra.
+
+
+6. Kategória kezelő
+-------------------
+Ez a fül arra való, hogy termékeket keress meg, és azok kategóriáit tömegesen módosítsd.
+
+Mire jó?
+- több termék egyszerre kategóriába helyezése
+- kategória eltávolítása több termékről
+- gyors ellenőrzés, hogy egy termék mely kategóriákban van
+
+Lépések:
+1. Írd be az SKU-t vagy válassz Product type-ot.
+2. Kattints a Keresés gombra.
+3. A listában jelöld ki a kívánt termékeket.
+4. Válaszd ki a szerkesztendő kategóriát.
+5. Döntsd el, hogy hozzáadni vagy eltávolítani szeretnéd.
+6. Indítsd el a műveletet.
+
+Mire figyelj?
+- mindig nézd meg, hogy valóban a jó termékek vannak kijelölve
+- az eltávolítás azonnal módosítja a webshop kategóriakapcsolatait
+
+
+7. Kép szerkesztő
+-----------------
+Ez a fül a termékképek kezelésére való.
+
+Mire jó?
+- termék keresése SKU alapján
+- képek megtekintése
+- főkép beállítása
+- kép törlése
+- új képek feltöltése
+
+Lépések:
+1. Írj be egy SKU-t vagy SKU-részletet a keresőbe.
+2. Kattints a Szűrés gombra.
+3. A találati listából válaszd ki a terméket.
+4. Kattints a Kiválasztott termék gombra.
+5. A betöltött képek közül kattints arra, amivel dolgozni szeretnél.
+6. Ezután az alábbi műveletek közül választhatsz:
+   - Kiválasztott kép beállítása főképként
+   - Kiválasztott kép törlése
+   - Képek feltöltése
+   - Képek frissítése
+
+Mit jelent a főkép?
+- ez a termék elsődleges képe a webshopban
+- általában ez látszik a terméklistákban és a termékoldalon elsőként
+
+Képfeltöltés:
+- egyszerre több képet is ki lehet választani
+- a már meglévő nevű képek kihagyásra kerülnek
+- ha egy terméknek még nincs főkép, az első új kép lehet a főkép
+
+Képtörlés:
+- csak akkor törölj képet, ha biztos vagy benne
+- a törlés a webshop képei közül is eltávolítja a kiválasztott képet
+
+
+8. Mit jelentenek a fontosabb kifejezések?
+------------------------------------------
+SKU:
+egyedi termékazonosító. A rendszer ezzel találja meg a terméket.
+
+Product type:
+terméktípus. Segít az azonos jellegű termékek csoportos keresésében.
+
+Főkép:
+a termék elsődleges képe.
+
+További kép:
+a termékhez tartozó plusz képek.
+
+
+9. Mire figyelj munka közben?
+-----------------------------
+- mindig ellenőrizd a kijelölt terméket vagy termékeket
+- tömeges művelet előtt nézd meg az érintett darabszámot
+- képtörlés előtt ellenőrizd, hogy biztosan a jó képet választottad ki
+- importnál először mindig ellenőrizd az előnézetet és a validálást
+
+
+10. Ha valami nem működik
+-------------------------
+Az alábbi esetekben érdemes segítséget kérni:
+
+- nem töltődnek be a termékek vagy kategóriák
+- a webshop kapcsolat hibát jelez
+- egy ismert SKU nem található
+- egy feltöltött kép nem jelenik meg
+- import közben sok hibát jelez a rendszer
+
+Ilyenkor érdemes felírni vagy lefotózni:
+- mit szerettél volna csinálni
+- melyik SKU-val dolgoztál
+- milyen hibaüzenet jelent meg
+
+
+11. Rövid összefoglalás
+-----------------------
+Ha egy terméket akarsz megkeresni és a képét módosítani:
+- menj a Kép szerkesztő fülre
+- szűrj SKU alapján
+- válaszd ki a terméket
+- töltsd be
+- módosítsd a képeket
+
+Ha több terméket akarsz kategóriába tenni vagy onnan kivenni:
+- menj a Kategória kezelő fülre
+- szűrj
+- jelöld ki a termékeket
+- válassz kategóriát
+- futtasd a műveletet
+
+Ha sok adatot akarsz egyszerre frissíteni Excelből:
+- menj az Importálás fülre
+- tallózd be az Excel fájlt
+- ellenőrizd
+- indítsd az importot

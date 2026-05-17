@@ -186,7 +186,7 @@ namespace WinFormsApp1
             accentBadgeLabel.ForeColor = AccentBlueColor;
             accentBadgeLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             accentBadgeLabel.TextAlign = ContentAlignment.MiddleCenter;
-            accentBadgeLabel.Text = "AszAdmin 1.0";
+            accentBadgeLabel.Text = "ÁszAdmin2.0";
 
             headerPanel.Controls.Add(brandPictureBox);
             headerPanel.Controls.Add(titleLabel);
@@ -4684,8 +4684,8 @@ namespace WinFormsApp1
             return $"""
                 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
                 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-                  <dc:creator>AszAdmin 1.0</dc:creator>
-                  <cp:lastModifiedBy>AszAdmin 1.0</cp:lastModifiedBy>
+                  <dc:creator>ÁszAdmin2.0</dc:creator>
+                  <cp:lastModifiedBy>ÁszAdmin2.0</cp:lastModifiedBy>
                   <dcterms:created xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:created>
                   <dcterms:modified xsi:type="dcterms:W3CDTF">{timestamp}</dcterms:modified>
                 </cp:coreProperties>

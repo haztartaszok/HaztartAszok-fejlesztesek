@@ -854,7 +854,7 @@ namespace WinFormsApp1
             MinimumSize = new Size(840, 820);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "AszAdmin 1.0";
+            Text = "ÁszAdmin2.0";
             fileGroupBox.ResumeLayout(false);
             fileGroupBox.PerformLayout();
             optionsGroupBox.ResumeLayout(false);
