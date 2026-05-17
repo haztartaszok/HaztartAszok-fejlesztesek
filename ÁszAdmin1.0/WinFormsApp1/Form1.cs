@@ -2911,14 +2911,14 @@ namespace WinFormsApp1
             int uploadedCount = 0;
             int mainImageCount = 0;
             int additionalImageCount = 0;
-            Dictionary<string, int> successfulImageUploadCountsBySku = new(StringComparer.OrdinalIgnoreCase);
+            int skippedDuplicateCount = 0;
+            Dictionary<string, HashSet<string>> knownImageFileNamesBySku = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> skusWithMainImage = new(StringComparer.OrdinalIgnoreCase);
 
             for (int index = 0; index < imageRows.Count; index++)
             {
                 ImageImportRow row = imageRows[index];
-                bool uploadAsMainImage = !successfulImageUploadCountsBySku.ContainsKey(row.Sku);
-                string uploadTypeLabel = uploadAsMainImage ? "fokep" : "tovabbi kep";
-                SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count}) - {uploadTypeLabel}");
+                SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count})");
 
                 try
                 {
@@ -2942,8 +2942,29 @@ namespace WinFormsApp1
                         continue;
                     }
 
+                    if (!knownImageFileNamesBySku.TryGetValue(row.Sku, out HashSet<string>? knownImageFileNames))
+                    {
+                        knownImageFileNames = await LoadKnownImageFileNamesForProductAsync(product);
+                        knownImageFileNamesBySku[row.Sku] = knownImageFileNames;
+
+                        if (HasMainImage(product))
+                        {
+                            skusWithMainImage.Add(row.Sku);
+                        }
+                    }
+
                     byte[] fileContent = await File.ReadAllBytesAsync(resolvedPath);
                     string uploadFileName = Path.GetFileName(resolvedPath);
+
+                    if (knownImageFileNames.Contains(uploadFileName))
+                    {
+                        skippedDuplicateCount++;
+                        continue;
+                    }
+
+                    bool uploadAsMainImage = !skusWithMainImage.Contains(row.Sku);
+                    string uploadTypeLabel = uploadAsMainImage ? "fokep" : "tovabbi kep";
+                    SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count}) - {uploadTypeLabel}");
                     string alternateText = string.IsNullOrWhiteSpace(product.ProductName)
                         ? uploadFileName
                         : product.ProductName.Trim();
@@ -2962,11 +2983,10 @@ namespace WinFormsApp1
                         product = await SaveMainImageMetadataAsync(product, uploadFileName);
                         loadedProductsBySku[row.Sku] = product;
                         resolvedProductsBySku[row.Sku] = product;
+                        skusWithMainImage.Add(row.Sku);
                     }
 
-                    successfulImageUploadCountsBySku[row.Sku] = successfulImageUploadCountsBySku.TryGetValue(row.Sku, out int currentCount)
-                        ? currentCount + 1
-                        : 1;
+                    knownImageFileNames.Add(uploadFileName);
 
                     uploadedCount++;
 
@@ -2985,7 +3005,61 @@ namespace WinFormsApp1
                 }
             }
 
+            if (skippedDuplicateCount > 0)
+            {
+                SetStatusMessage($"Kepek feltoltese kesz. {skippedDuplicateCount} mar letezo kep kihagyva.");
+            }
+
             return (uploadedCount, mainImageCount, additionalImageCount);
+        }
+
+        private async Task<HashSet<string>> LoadKnownImageFileNamesForProductAsync(HotcakesProduct product)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+
+            HashSet<string> knownFileNames = new(StringComparer.OrdinalIgnoreCase);
+
+            RegisterKnownImageFileName(knownFileNames, product.ImageFileSmall);
+            RegisterKnownImageFileName(knownFileNames, product.ImageFileMedium);
+
+            if (string.IsNullOrWhiteSpace(product.Bvin))
+            {
+                return knownFileNames;
+            }
+
+            IReadOnlyList<HotcakesProductImage> existingImages = await hotcakesClient.GetProductImagesForProductAsync(product.Bvin);
+
+            foreach (HotcakesProductImage existingImage in existingImages)
+            {
+                RegisterKnownImageFileName(knownFileNames, existingImage.FileName);
+            }
+
+            return knownFileNames;
+        }
+
+        private static bool HasMainImage(HotcakesProduct product)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+
+            return !string.IsNullOrWhiteSpace(product.ImageFileSmall) ||
+                   !string.IsNullOrWhiteSpace(product.ImageFileMedium);
+        }
+
+        private static void RegisterKnownImageFileName(ISet<string> target, string fileName)
+        {
+            ArgumentNullException.ThrowIfNull(target);
+
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return;
+            }
+
+            string normalizedFileName = Path.GetFileName(fileName.Trim());
+
+            if (!string.IsNullOrWhiteSpace(normalizedFileName))
+            {
+                target.Add(normalizedFileName);
+            }
         }
 
         private async Task<HotcakesProduct> SaveMainImageMetadataAsync(HotcakesProduct product, string fileName)
