@@ -198,6 +198,29 @@ namespace WinFormsApp1
         public int OutOfStockPoint { get; set; }
     }
 
+    internal sealed class HotcakesProductImage
+    {
+        public string Bvin { get; set; } = string.Empty;
+
+        [JsonConverter(typeof(HotcakesDateTimeConverter))]
+        public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;
+
+        public string ProductId { get; set; } = string.Empty;
+
+        public string FileName { get; set; } = string.Empty;
+
+        public string Caption { get; set; } = string.Empty;
+
+        public string AlternateText { get; set; } = string.Empty;
+
+        public int SortOrder { get; set; }
+
+        public long StoreId { get; set; }
+
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+    }
+
     internal sealed class HotcakesCategoryProductAssociation
     {
         public long Id { get; set; }

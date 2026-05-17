@@ -353,6 +353,8 @@ namespace WinFormsApp1
             string productBvin,
             string fileName,
             byte[] fileContent,
+            string alternateText,
+            long storeId = 0,
             string imageBvin = "",
             CancellationToken cancellationToken = default)
         {
@@ -360,17 +362,92 @@ namespace WinFormsApp1
             ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
             ArgumentNullException.ThrowIfNull(fileContent);
 
+            return UploadProductAdditionalImageCoreAsync(
+                productBvin,
+                fileName,
+                fileContent,
+                alternateText,
+                storeId,
+                imageBvin,
+                cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<HotcakesProductImage>> GetProductImagesForProductAsync(
+            string productBvin,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+
             Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
             {
-                ["filename"] = fileName.Trim()
+                ["byproduct"] = productBvin.Trim()
             };
 
-            string relativePath = string.IsNullOrWhiteSpace(imageBvin)
-                ? $"productimagesupload/{Uri.EscapeDataString(productBvin.Trim())}/"
-                : $"productimagesupload/{Uri.EscapeDataString(productBvin.Trim())}/{Uri.EscapeDataString(imageBvin.Trim())}";
+            HotcakesApiResponse<List<HotcakesProductImage>> response = await GetAsync<List<HotcakesProductImage>>(
+                "productimages/",
+                queryParameters,
+                cancellationToken);
 
-            return PostContentAsync(
-                relativePath,
+            return response.Content ?? [];
+        }
+
+        private async Task<bool> UploadProductAdditionalImageCoreAsync(
+            string productBvin,
+            string fileName,
+            byte[] fileContent,
+            string alternateText,
+            long storeId,
+            string imageBvin,
+            CancellationToken cancellationToken)
+        {
+            string resolvedImageBvin = imageBvin.Trim();
+            string trimmedProductBvin = productBvin.Trim();
+            string trimmedFileName = fileName.Trim();
+
+            if (string.IsNullOrWhiteSpace(resolvedImageBvin))
+            {
+                IReadOnlyList<HotcakesProductImage> existingImages = await GetProductImagesForProductAsync(
+                    trimmedProductBvin,
+                    cancellationToken);
+
+                int nextSortOrder = existingImages.Count == 0
+                    ? 1
+                    : existingImages.Max(image => image.SortOrder) + 1;
+
+                HotcakesProductImage createdImage = await PostContentAsync(
+                    "productimages/",
+                    new HotcakesProductImage
+                    {
+                        ProductId = trimmedProductBvin,
+                        FileName = trimmedFileName,
+                        Caption = string.Empty,
+                        AlternateText = alternateText ?? string.Empty,
+                        SortOrder = nextSortOrder,
+                        StoreId = storeId,
+                        LastUpdatedUtc = DateTime.UtcNow
+                    },
+                    static () => new HotcakesProductImage(),
+                    cancellationToken);
+
+                if (string.IsNullOrWhiteSpace(createdImage.Bvin))
+                {
+                    throw new HotcakesApiException(
+                        "A Hotcakes nem adott vissza ervenyes kepazonositot a tovabbi kep letrehozasakor.",
+                        BuildRequestUri("productimages/", null),
+                        null,
+                        []);
+                }
+
+                resolvedImageBvin = createdImage.Bvin;
+            }
+
+            Dictionary<string, string?> queryParameters = new(StringComparer.Ordinal)
+            {
+                ["filename"] = trimmedFileName
+            };
+
+            return await PostContentAsync(
+                $"productimagesupload/{Uri.EscapeDataString(trimmedProductBvin)}/{Uri.EscapeDataString(resolvedImageBvin)}",
                 queryParameters,
                 fileContent,
                 static () => false,

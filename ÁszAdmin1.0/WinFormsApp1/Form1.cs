@@ -2944,9 +2944,12 @@ namespace WinFormsApp1
 
                     byte[] fileContent = await File.ReadAllBytesAsync(resolvedPath);
                     string uploadFileName = Path.GetFileName(resolvedPath);
+                    string alternateText = string.IsNullOrWhiteSpace(product.ProductName)
+                        ? uploadFileName
+                        : product.ProductName.Trim();
                     bool uploaded = uploadAsMainImage
                         ? await hotcakesClient.UploadProductMainImageAsync(product.Bvin, uploadFileName, fileContent)
-                        : await hotcakesClient.UploadProductAdditionalImageAsync(product.Bvin, uploadFileName, fileContent);
+                        : await hotcakesClient.UploadProductAdditionalImageAsync(product.Bvin, uploadFileName, fileContent, alternateText, product.StoreId);
 
                     if (!uploaded)
                     {
