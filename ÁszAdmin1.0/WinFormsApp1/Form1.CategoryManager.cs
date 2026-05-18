@@ -417,12 +417,10 @@ namespace WinFormsApp1
         {
             if (!hotcakesReady)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "A Hotcakes kapcsolat még nem áll készen a kategória kezelő használatához.",
                     "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "A Hotcakes kapcsolat még nem áll készen a kategória kezelő használatához.");
                 return;
             }
 
@@ -468,12 +466,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A kategória kezelő keresése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A kategória kezelő keresése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A kategória kezelő keresése nem sikerült.", true);
             }
             finally
@@ -525,12 +521,10 @@ namespace WinFormsApp1
             if (categoryBulkCategoryComboBox.SelectedItem is not CategoryComboItem selectedCategory ||
                 string.IsNullOrWhiteSpace(selectedCategory.Bvin))
             {
-                MessageBox.Show(
+                AppDialog.ShowInfo(
                     this,
-                    "Válassz ki egy kategóriát a művelethez.",
                     "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Válassz ki egy kategóriát a művelethez.");
                 return;
             }
 
@@ -540,12 +534,10 @@ namespace WinFormsApp1
 
             if (selectedRows.Count == 0)
             {
-                MessageBox.Show(
+                AppDialog.ShowInfo(
                     this,
-                    "Jelölj ki legalább egy terméket a táblázatban.",
                     "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Jelölj ki legalább egy terméket a táblázatban.");
                 return;
             }
 
@@ -652,21 +644,21 @@ namespace WinFormsApp1
                 categoryActionStatusLabel.Text = $"Legutóbbi művelet: {changedCount} módosítva, {skippedCount} kihagyva.";
                 SetStatusMessage($"Kategória kezelő: {changedCount} termék frissítve.");
 
-                MessageBox.Show(
-                    this,
-                    resultBuilder.ToString(),
-                    "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                if (errors.Count == 0)
+                {
+                    AppDialog.ShowInfo(this, "Kategória kezelő", resultBuilder.ToString());
+                }
+                else
+                {
+                    AppDialog.ShowWarning(this, "Kategória kezelő", resultBuilder.ToString());
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A kategória művelet nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kategória kezelő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A kategória művelet nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A kategória művelet nem sikerült.", true);
             }
             finally

@@ -160,7 +160,7 @@ namespace WinFormsApp1
             filePathTextBox.Location = new Point(8, 61);
             filePathTextBox.Margin = new Padding(4);
             filePathTextBox.Name = "filePathTextBox";
-            filePathTextBox.PlaceholderText = "Valassz import fajlt...";
+            filePathTextBox.PlaceholderText = "Válassz import fájlt...";
             filePathTextBox.Size = new Size(772, 31);
             filePathTextBox.TabIndex = 1;
             // 
@@ -218,7 +218,7 @@ namespace WinFormsApp1
             existingItemModeComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             existingItemModeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             existingItemModeComboBox.FormattingEnabled = true;
-            existingItemModeComboBox.Items.AddRange(new object[] { "Frissites SKU alapjan", "Kihagyas" });
+            existingItemModeComboBox.Items.AddRange(new object[] { "Frissítés SKU alapján", "Kihagyás" });
             existingItemModeComboBox.Location = new Point(548, 55);
             existingItemModeComboBox.Margin = new Padding(4);
             existingItemModeComboBox.Name = "existingItemModeComboBox";
@@ -239,7 +239,7 @@ namespace WinFormsApp1
             // 
             importTypeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             importTypeComboBox.FormattingEnabled = true;
-            importTypeComboBox.Items.AddRange(new object[] { "Termek import", "Kep import", "Kategoria import", "Tulajdonsag import", "Osszes importalasa" });
+            importTypeComboBox.Items.AddRange(new object[] { "Termék import", "Kép import", "Kategória import", "Tulajdonság import", "Összes importálása" });
             importTypeComboBox.Location = new Point(30, 55);
             importTypeComboBox.Margin = new Padding(4);
             importTypeComboBox.Name = "importTypeComboBox";
@@ -418,7 +418,7 @@ namespace WinFormsApp1
             priceModeComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             priceModeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             priceModeComboBox.FormattingEnabled = true;
-            priceModeComboBox.Items.AddRange(new object[] { "Szazalekos modositas", "Fix osszeg hozzaadasa", "Uj ar beallitasa" });
+            priceModeComboBox.Items.AddRange(new object[] { "Százalékos módosítás", "Fix összeg hozzáadása", "Új ár beállítása" });
             priceModeComboBox.Location = new Point(30, 181);
             priceModeComboBox.Margin = new Padding(4);
             priceModeComboBox.Name = "priceModeComboBox";
@@ -440,7 +440,7 @@ namespace WinFormsApp1
             priceCategoryComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             priceCategoryComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             priceCategoryComboBox.FormattingEnabled = true;
-            priceCategoryComboBox.Items.AddRange(new object[] { "Osszes kategoria", "Elektronika", "Ruhazat", "Cipok" });
+            priceCategoryComboBox.Items.AddRange(new object[] { "Összes kategória", "Elektronika", "Ruházat", "Cipők" });
             priceCategoryComboBox.Location = new Point(30, 105);
             priceCategoryComboBox.Margin = new Padding(4);
             priceCategoryComboBox.Name = "priceCategoryComboBox";
@@ -523,7 +523,7 @@ namespace WinFormsApp1
             statusValueComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             statusValueComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             statusValueComboBox.FormattingEnabled = true;
-            statusValueComboBox.Items.AddRange(new object[] { "Aktiv", "Inaktiv" });
+            statusValueComboBox.Items.AddRange(new object[] { "Aktív", "Inaktív" });
             statusValueComboBox.Location = new Point(30, 211);
             statusValueComboBox.Margin = new Padding(4);
             statusValueComboBox.Name = "statusValueComboBox";
@@ -557,7 +557,7 @@ namespace WinFormsApp1
             statusFilterComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             statusFilterComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             statusFilterComboBox.FormattingEnabled = true;
-            statusFilterComboBox.Items.AddRange(new object[] { "Adott kategoria", "Osszes termek", "Nincs raktaron" });
+            statusFilterComboBox.Items.AddRange(new object[] { "Adott kategória", "Összes termék", "Nincs raktáron" });
             statusFilterComboBox.Location = new Point(30, 135);
             statusFilterComboBox.Margin = new Padding(4);
             statusFilterComboBox.Name = "statusFilterComboBox";
@@ -639,7 +639,7 @@ namespace WinFormsApp1
             targetCategoryComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             targetCategoryComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             targetCategoryComboBox.FormattingEnabled = true;
-            targetCategoryComboBox.Items.AddRange(new object[] { "Valasszon...", "Elektronika", "Ruhazat", "Cipok" });
+            targetCategoryComboBox.Items.AddRange(new object[] { "Válasszon...", "Elektronika", "Ruházat", "Cipők" });
             targetCategoryComboBox.Location = new Point(30, 211);
             targetCategoryComboBox.Margin = new Padding(4);
             targetCategoryComboBox.Name = "targetCategoryComboBox";
@@ -763,7 +763,7 @@ namespace WinFormsApp1
             deleteConditionComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             deleteConditionComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             deleteConditionComboBox.FormattingEnabled = true;
-            deleteConditionComboBox.Items.AddRange(new object[] { "Inaktiv termekek", "Nincs raktaron", "90+ napja nem frissitett" });
+            deleteConditionComboBox.Items.AddRange(new object[] { "Inaktív termékek", "Nincs raktáron", "90+ napja nem frissített" });
             deleteConditionComboBox.Location = new Point(30, 135);
             deleteConditionComboBox.Margin = new Padding(4);
             deleteConditionComboBox.Name = "deleteConditionComboBox";

@@ -18,11 +18,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"A settings.json betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Beallitas hiba",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                AppDialog.ShowError(
+                    null,
+                    "Beállítási hiba",
+                    $"A settings.json betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 return;
             }
 

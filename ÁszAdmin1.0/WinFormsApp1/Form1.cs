@@ -562,7 +562,7 @@ namespace WinFormsApp1
 
             isInitializingHotcakes = true;
             UpdateActionStates();
-            SetStatusMessage("Hotcakes kategoriak, termektipusok es tulajdonsagok betoltese...");
+            SetStatusMessage("Hotcakes kategóriák, terméktípusok és tulajdonságok betöltése...");
 
             try
             {
@@ -582,12 +582,10 @@ namespace WinFormsApp1
                 {
                     productTypes = [];
 
-                    MessageBox.Show(
+                    AppDialog.ShowWarning(
                         this,
-                        $"A Hotcakes termektipusok betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A tovabbi import akkor tud TermekTipus mezot kezelni, ha ez a lista betoltheto.",
                         "Hotcakes kapcsolat",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
+                        $"A Hotcakes terméktípusok betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A további import akkor tud TermékTípus mezőt kezelni, ha ez a lista betölthető.");
                 }
 
                 loadedProductTypes.Clear();
@@ -603,12 +601,10 @@ namespace WinFormsApp1
                 {
                     productProperties = [];
 
-                    MessageBox.Show(
+                    AppDialog.ShowWarning(
                         this,
-                        $"A Hotcakes termektulajdonsagok betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A tulajdonsagimport csak akkor tud biztonsagosan meglevo property-khez kapcsolodni, ha ez a lista betoltheto.",
                         "Hotcakes kapcsolat",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
+                        $"A Hotcakes terméktulajdonságok betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}A tulajdonságimport csak akkor tud biztonságosan meglévő property-khez kapcsolódni, ha ez a lista betölthető.");
                 }
 
                 loadedProductProperties.Clear();
@@ -628,19 +624,17 @@ namespace WinFormsApp1
                     _ = RefreshStatusAffectedProductsAsync();
                 }
 
-                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategoria, {loadedProductTypes.Count} termektipus, {loadedProductProperties.Count} termektulajdonsag betoltve.");
+                SetStatusMessage($"{loadedCategories.Count} Hotcakes kategória, {loadedProductTypes.Count} terméktípus, {loadedProductProperties.Count} terméktulajdonság betöltve.");
             }
             catch (Exception ex)
             {
                 hotcakesReady = false;
                 SetStatusMessage("Hotcakes kapcsolat nem elerheto. Az Excel elonezet tovabbra is mukodik.", true);
 
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    $"A Hotcakes kategoriak betoltese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Hotcakes kapcsolat",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    $"A Hotcakes kategóriák betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
             finally
             {
@@ -655,13 +649,13 @@ namespace WinFormsApp1
                 .Select(category => new CategoryComboItem(category.Name, category.Bvin, category.RewriteUrl))
                 .ToList();
 
-            List<object> priceItems = [new CategoryComboItem("Osszes kategoria", null, null)];
+            List<object> priceItems = [new CategoryComboItem("Összes kategória", null, null)];
             priceItems.AddRange(categoryItems);
 
-            List<object> targetItems = [new CategoryComboItem("Valasszon...", null, null)];
+            List<object> targetItems = [new CategoryComboItem("Válasszon...", null, null)];
             targetItems.AddRange(categoryItems);
 
-            List<object> statusItems = [new CategoryComboItem("Valasszon kategoriat...", null, null)];
+            List<object> statusItems = [new CategoryComboItem("Válasszon kategóriát...", null, null)];
             statusItems.AddRange(categoryItems);
 
             ReplaceComboBoxItems(priceCategoryComboBox, priceItems, 0);
@@ -791,7 +785,7 @@ namespace WinFormsApp1
 
             if (string.IsNullOrWhiteSpace(normalizedValue))
             {
-                failureReason = "A megadott TermekTipus ertek nem tartalmaz feloldhato karaktereket.";
+                failureReason = "A megadott TermékTípus érték nem tartalmaz feloldható karaktereket.";
                 return false;
             }
 
@@ -838,7 +832,7 @@ namespace WinFormsApp1
 
             if (string.IsNullOrWhiteSpace(normalizedValue))
             {
-                failureReason = "A megadott tulajdonsagnev nem tartalmaz feloldhato karaktereket.";
+                failureReason = "A megadott tulajdonságnév nem tartalmaz feloldható karaktereket.";
                 return false;
             }
 
@@ -1298,23 +1292,19 @@ namespace WinFormsApp1
         {
             if (!hotcakesReady)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "A Hotcakes kapcsolat meg nem all keszen a tomeges arfrissiteshez.",
-                    "Tomeges arfrissites",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Tömeges árfrissítés",
+                    "A Hotcakes kapcsolat még nem áll készen a tömeges árfrissítéshez.");
                 return;
             }
 
             if (!TryParsePriceBulkValue(out decimal inputValue, out string? validationError))
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    validationError ?? "Az arfissites erteke nem ervenyes.",
-                    "Tomeges arfrissites",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Tömeges árfrissítés",
+                    validationError ?? "Az árfrissítés értéke nem érvényes.");
                 return;
             }
 
@@ -1328,30 +1318,26 @@ namespace WinFormsApp1
 
                 if (targetProducts.Count == 0)
                 {
-                    MessageBox.Show(
+                    AppDialog.ShowInfo(
                         this,
-                        "A jelenlegi szures egyetlen termeket sem erint.",
-                        "Tomeges arfrissites",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
+                        "Tömeges árfrissítés",
+                        "A jelenlegi szűrés egyetlen terméket sem érint.");
                     return;
                 }
 
-                string modeLabel = priceModeComboBox.SelectedItem?.ToString()?.Trim() ?? "Arfrissites";
-                string categoryLabel = priceCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Osszes kategoria";
+                string modeLabel = priceModeComboBox.SelectedItem?.ToString()?.Trim() ?? "Árfrissítés";
+                string categoryLabel = priceCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Összes kategória";
 
-                DialogResult confirmationResult = MessageBox.Show(
+                bool confirmed = AppDialog.ShowConfirmation(
                     this,
-                    $"Valoban lefuttatod a tomeges arfrissitest?{Environment.NewLine}{Environment.NewLine}" +
-                    $"Erintett termekek: {targetProducts.Count}{Environment.NewLine}" +
-                    $"Kategoria: {categoryLabel}{Environment.NewLine}" +
-                    $"Modositas tipusa: {modeLabel}{Environment.NewLine}" +
-                    $"Ertek: {priceValueTextBox.Text.Trim()}",
-                    "Tomeges arfrissites",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
+                    "Tömeges árfrissítés",
+                    $"Valóban lefuttatod a tömeges árfrissítést?{Environment.NewLine}{Environment.NewLine}" +
+                    $"Érintett termékek: {targetProducts.Count}{Environment.NewLine}" +
+                    $"Kategória: {categoryLabel}{Environment.NewLine}" +
+                    $"Módosítás típusa: {modeLabel}{Environment.NewLine}" +
+                    $"Érték: {priceValueTextBox.Text.Trim()}");
 
-                if (confirmationResult != DialogResult.Yes)
+                if (!confirmed)
                 {
                     return;
                 }
@@ -1370,7 +1356,7 @@ namespace WinFormsApp1
 
                         if (currentProduct is null)
                         {
-                            errors.Add($"{targetProduct.Sku}: a termek nem talalhato frissites elott.");
+                            errors.Add($"{targetProduct.Sku}: a termék nem található frissítés előtt.");
                             continue;
                         }
 
@@ -1407,16 +1393,16 @@ namespace WinFormsApp1
                 await RefreshPriceAffectedProductsAsync();
 
                 StringBuilder resultBuilder = new();
-                resultBuilder.AppendLine("Tomeges arfrissites eredmeny");
-                resultBuilder.AppendLine($"Erintett termekek: {targetProducts.Count}");
-                resultBuilder.AppendLine($"Sikeresen frissitett termekek: {updatedCount}");
-                resultBuilder.AppendLine($"Valtozatlanul maradt termekek: {unchangedCount}");
-                resultBuilder.AppendLine($"Hibas termekek: {errors.Count}");
+                resultBuilder.AppendLine("Tömeges árfrissítés eredménye");
+                resultBuilder.AppendLine($"Érintett termékek: {targetProducts.Count}");
+                resultBuilder.AppendLine($"Sikeresen frissített termékek: {updatedCount}");
+                resultBuilder.AppendLine($"Változatlanul maradt termékek: {unchangedCount}");
+                resultBuilder.AppendLine($"Hibás termékek: {errors.Count}");
 
                 if (errors.Count > 0)
                 {
                     resultBuilder.AppendLine();
-                    resultBuilder.AppendLine("Elso hibak:");
+                    resultBuilder.AppendLine("Első hibák:");
 
                     foreach (string error in errors.Take(10))
                     {
@@ -1424,21 +1410,21 @@ namespace WinFormsApp1
                     }
                 }
 
-                MessageBox.Show(
-                    this,
-                    resultBuilder.ToString(),
-                    "Tomeges arfrissites",
-                    MessageBoxButtons.OK,
-                    errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                if (errors.Count == 0)
+                {
+                    AppDialog.ShowInfo(this, "Tömeges árfrissítés", resultBuilder.ToString());
+                }
+                else
+                {
+                    AppDialog.ShowWarning(this, "Tömeges árfrissítés", resultBuilder.ToString());
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A tomeges arfrissites nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Tomeges arfrissites",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "Tömeges árfrissítés",
+                    $"A tömeges árfrissítés nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
             finally
             {
@@ -1588,12 +1574,10 @@ namespace WinFormsApp1
         {
             if (!hotcakesReady)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "A Hotcakes kapcsolat meg nem all keszen a statuszmodositas futtatasahoz.",
-                    "Aktivalas / Inaktivalas",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Aktiválás / Inaktiválás",
+                    "A Hotcakes kapcsolat még nem áll készen a státuszmódosítás futtatásához.");
                 return;
             }
 
@@ -1602,12 +1586,10 @@ namespace WinFormsApp1
 
             if (selectedFilter == StatusBulkFilter.ByCategory && string.IsNullOrWhiteSpace(selectedCategoryId))
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "Valassz kategoriat az 'Adott kategoria' szureshez.",
-                    "Aktivalas / Inaktivalas",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Aktiválás / Inaktiválás",
+                    "Válassz kategóriát az 'Adott kategória' szűréshez.");
                 return;
             }
 
@@ -1621,30 +1603,26 @@ namespace WinFormsApp1
 
                 if (targetProducts.Count == 0)
                 {
-                    MessageBox.Show(
+                    AppDialog.ShowInfo(
                         this,
-                        "A jelenlegi szures egyetlen termeket sem erint.",
-                        "Aktivalas / Inaktivalas",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
+                        "Aktiválás / Inaktiválás",
+                        "A jelenlegi szűrés egyetlen terméket sem érint.");
                     return;
                 }
 
                 StatusBulkTargetState targetState = GetSelectedStatusBulkTargetState();
-                string targetStateLabel = targetState == StatusBulkTargetState.Active ? "Aktiv" : "Inaktiv";
+                string targetStateLabel = targetState == StatusBulkTargetState.Active ? "Aktív" : "Inaktív";
                 string filterLabel = GetSelectedStatusFilterSummary();
 
-                DialogResult confirmationResult = MessageBox.Show(
+                bool confirmed = AppDialog.ShowConfirmation(
                     this,
-                    $"Valoban lefuttatod a statuszmodositast?{Environment.NewLine}{Environment.NewLine}" +
-                    $"Erintett termekek: {targetProducts.Count}{Environment.NewLine}" +
-                    $"Szures: {filterLabel}{Environment.NewLine}" +
-                    $"Uj statusz: {targetStateLabel}",
-                    "Aktivalas / Inaktivalas",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
+                    "Aktiválás / Inaktiválás",
+                    $"Valóban lefuttatod a státuszmódosítást?{Environment.NewLine}{Environment.NewLine}" +
+                    $"Érintett termékek: {targetProducts.Count}{Environment.NewLine}" +
+                    $"Szűrés: {filterLabel}{Environment.NewLine}" +
+                    $"Új státusz: {targetStateLabel}");
 
-                if (confirmationResult != DialogResult.Yes)
+                if (!confirmed)
                 {
                     return;
                 }
@@ -1667,7 +1645,7 @@ namespace WinFormsApp1
 
                         if (currentProduct is null)
                         {
-                            errors.Add($"{targetProduct.Sku}: a termek nem talalhato frissites elott.");
+                            errors.Add($"{targetProduct.Sku}: a termék nem található frissítés előtt.");
                             continue;
                         }
 
@@ -1694,16 +1672,16 @@ namespace WinFormsApp1
                 await RefreshStatusAffectedProductsAsync();
 
                 StringBuilder resultBuilder = new();
-                resultBuilder.AppendLine("Statuszmodositas eredmeny");
-                resultBuilder.AppendLine($"Erintett termekek: {targetProducts.Count}");
-                resultBuilder.AppendLine($"Sikeresen modositott termekek: {updatedCount}");
-                resultBuilder.AppendLine($"Valtozatlanul maradt termekek: {unchangedCount}");
-                resultBuilder.AppendLine($"Hibas termekek: {errors.Count}");
+                resultBuilder.AppendLine("Státuszmódosítás eredménye");
+                resultBuilder.AppendLine($"Érintett termékek: {targetProducts.Count}");
+                resultBuilder.AppendLine($"Sikeresen módosított termékek: {updatedCount}");
+                resultBuilder.AppendLine($"Változatlanul maradt termékek: {unchangedCount}");
+                resultBuilder.AppendLine($"Hibás termékek: {errors.Count}");
 
                 if (errors.Count > 0)
                 {
                     resultBuilder.AppendLine();
-                    resultBuilder.AppendLine("Elso hibak:");
+                    resultBuilder.AppendLine("Első hibák:");
 
                     foreach (string error in errors.Take(10))
                     {
@@ -1711,21 +1689,21 @@ namespace WinFormsApp1
                     }
                 }
 
-                MessageBox.Show(
-                    this,
-                    resultBuilder.ToString(),
-                    "Aktivalas / Inaktivalas",
-                    MessageBoxButtons.OK,
-                    errors.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                if (errors.Count == 0)
+                {
+                    AppDialog.ShowInfo(this, "Aktiválás / Inaktiválás", resultBuilder.ToString());
+                }
+                else
+                {
+                    AppDialog.ShowWarning(this, "Aktiválás / Inaktiválás", resultBuilder.ToString());
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A statuszmodositas nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Aktivalas / Inaktivalas",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "Aktiválás / Inaktiválás",
+                    $"A státuszmódosítás nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
             finally
             {
@@ -1892,9 +1870,9 @@ namespace WinFormsApp1
 
             return selectedFilter switch
             {
-                StatusBulkFilter.AllProducts => "Osszes termek",
-                StatusBulkFilter.OutOfStock => "Nincs raktaron",
-                _ => statusCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Adott kategoria"
+                StatusBulkFilter.AllProducts => "Összes termék",
+                StatusBulkFilter.OutOfStock => "Nincs raktáron",
+                _ => statusCategoryComboBox.SelectedItem?.ToString()?.Trim() ?? "Adott kategória"
             };
         }
 
@@ -1957,21 +1935,17 @@ namespace WinFormsApp1
             {
                 CreateImportTemplate(saveDialog.FileName);
 
-                MessageBox.Show(
+                AppDialog.ShowInfo(
                     this,
-                    "A sablon sikeresen elmentve.",
-                    "Sablon mentes",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Sablon mentése",
+                    "A sablon sikeresen elmentve.");
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A sablon mentese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Sablon mentes",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "Sablon mentése",
+                    $"A sablon mentése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
         }
 
@@ -2005,7 +1979,7 @@ namespace WinFormsApp1
 
                 if (hotcakesReady)
                 {
-                    SetStatusMessage($"{loadedWorkbookSheets.Count} munkalap betoltve. Futtasd az ellenorzest a kovetkezo lepeshez.");
+                    SetStatusMessage($"{loadedWorkbookSheets.Count} munkalap betöltve. Futtasd az ellenőrzést a következő lépéshez.");
                 }
             }
             catch (Exception ex)
@@ -2021,12 +1995,10 @@ namespace WinFormsApp1
                     SetStatusMessage("Az Excel fajl beolvasasa nem sikerult.", true);
                 }
 
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A kivalasztott Excel fajl nem olvashato be.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Import fajl megnyitasa",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "Import fájl megnyitása",
+                    $"A kiválasztott Excel fájl nem olvasható be.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
         }
 
@@ -2180,25 +2152,25 @@ namespace WinFormsApp1
                 UpdateActionStates();
                 SetStatusMessage(validationResult.StatusMessage, !validationResult.CanProceed);
 
-                MessageBox.Show(
-                    this,
-                    validationResult.DetailsMessage,
-                    "Import ellenorzes",
-                    MessageBoxButtons.OK,
-                    validationResult.CanProceed ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                if (validationResult.CanProceed)
+                {
+                    AppDialog.ShowInfo(this, "Import ellenőrzés", validationResult.DetailsMessage);
+                }
+                else
+                {
+                    AppDialog.ShowWarning(this, "Import ellenőrzés", validationResult.DetailsMessage);
+                }
             }
             catch (Exception ex)
             {
                 lastValidationResult = null;
                 UpdateActionStates();
-                SetStatusMessage("Az import ellenorzese nem sikerult.", true);
+                SetStatusMessage("Az import ellenőrzése nem sikerült.", true);
 
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    $"Az import ellenorzese nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Import ellenorzes",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Import ellenőrzés",
+                    $"Az import ellenőrzése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
             finally
             {
@@ -2210,34 +2182,28 @@ namespace WinFormsApp1
         {
             if (lastValidationResult is null)
             {
-                MessageBox.Show(
+                AppDialog.ShowInfo(
                     this,
-                    "Import inditas elott futtasd le az ellenorzest.",
-                    "Import inditasa",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Import indítása",
+                    "Import indítása előtt futtasd le az ellenőrzést.");
                 return;
             }
 
             if (!lastValidationResult.CanProceed)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "Az import inditasa elott javitsd a validacios hibakat, majd futtasd ujra az ellenorzest.",
-                    "Import inditasa",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Import indítása",
+                    "Az import indítása előtt javítsd a validációs hibákat, majd futtasd újra az ellenőrzést.");
                 return;
             }
 
-            DialogResult confirmationResult = MessageBox.Show(
+            bool confirmed = AppDialog.ShowConfirmation(
                 this,
-                lastValidationResult.ConfirmationMessage,
-                "Import inditasa",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
+                "Import indítása",
+                lastValidationResult.ConfirmationMessage);
 
-            if (confirmationResult != DialogResult.Yes)
+            if (!confirmed)
             {
                 return;
             }
@@ -2277,26 +2243,26 @@ namespace WinFormsApp1
                 if (!string.IsNullOrWhiteSpace(historySaveWarning))
                 {
                     detailsMessage +=
-                        $"{Environment.NewLine}{Environment.NewLine}Figyelem: az importelozmeny mentese nem sikerult.{Environment.NewLine}{historySaveWarning}";
+                        $"{Environment.NewLine}{Environment.NewLine}Figyelem: az importelőzmény mentése nem sikerült.{Environment.NewLine}{historySaveWarning}";
                 }
 
-                MessageBox.Show(
-                    this,
-                    detailsMessage,
-                    "Import eredmeny",
-                    MessageBoxButtons.OK,
-                    importResult.ErrorCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                if (importResult.ErrorCount > 0)
+                {
+                    AppDialog.ShowWarning(this, "Import eredmény", detailsMessage);
+                }
+                else
+                {
+                    AppDialog.ShowInfo(this, "Import eredmény", detailsMessage);
+                }
             }
             catch (Exception ex)
             {
                 SetStatusMessage("Az import futtatasa nem sikerult.", true);
 
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"Az import futtatasa nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Import inditasa",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "Import indítása",
+                    $"Az import futtatása nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
             finally
             {
@@ -2317,12 +2283,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    $"Az importelozmenyek megnyitasa nem sikerult.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "Import elozmenyek",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "Import előzmények",
+                    $"Az importelőzmények megnyitása nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
             }
         }
 
@@ -2440,7 +2404,7 @@ namespace WinFormsApp1
                     ? $" ({duplicateSkuCount} duplikalt API SKU kihagyva)"
                     : string.Empty;
 
-                SetStatusMessage($"{loadedProductsBySku.Count} Hotcakes termek betoltve{duplicateSuffix}.");
+                SetStatusMessage($"{loadedProductsBySku.Count} Hotcakes termék betöltve{duplicateSuffix}.");
             }
             finally
             {
@@ -2575,40 +2539,40 @@ namespace WinFormsApp1
                                     unresolvedProductTypeCount;
                 productCanProceed = productTable.Rows.Count > 0 && productIssueCount == 0;
 
-                detailsBuilder.AppendLine($"Termek munkalap: {productTable.Name}");
+                detailsBuilder.AppendLine($"Termék munkalap: {productTable.Name}");
                 detailsBuilder.AppendLine($"Adatsorok: {productTable.Rows.Count}");
-                detailsBuilder.AppendLine($"Frissitheto termekek: {existingProductCount}");
-                detailsBuilder.AppendLine($"Uj termekek: {newProductCount}");
-                detailsBuilder.AppendLine($"Ures SKU sorok: {missingSkuCount}");
-                detailsBuilder.AppendLine($"Duplikalt SKU-k: {duplicateSkus.Count}");
-                detailsBuilder.AppendLine($"Uj termeknel hianyzo Nev mezok: {missingNameForNewProductCount}");
-                detailsBuilder.AppendLine($"Hibas Ar mezok: {invalidPriceCount}");
-                detailsBuilder.AppendLine($"Hibas Keszlet mezok: {invalidStockCount}");
-                detailsBuilder.AppendLine($"Nem feloldhato TermekTipus ertekek: {unresolvedProductTypeCount}");
+                detailsBuilder.AppendLine($"Frissíthető termékek: {existingProductCount}");
+                detailsBuilder.AppendLine($"Új termékek: {newProductCount}");
+                detailsBuilder.AppendLine($"Üres SKU sorok: {missingSkuCount}");
+                detailsBuilder.AppendLine($"Duplikált SKU-k: {duplicateSkus.Count}");
+                detailsBuilder.AppendLine($"Új terméknél hiányzó Név mezők: {missingNameForNewProductCount}");
+                detailsBuilder.AppendLine($"Hibás Ár mezők: {invalidPriceCount}");
+                detailsBuilder.AppendLine($"Hibás Készlet mezők: {invalidStockCount}");
+                detailsBuilder.AppendLine($"Nem feloldható TermékTípus értékek: {unresolvedProductTypeCount}");
 
                 if (duplicateSkus.Count > 0)
                 {
-                    detailsBuilder.AppendLine($"Pelda duplikalt SKU-k: {string.Join(", ", duplicateSkus.Take(5))}");
+                    detailsBuilder.AppendLine($"Példa duplikált SKU-k: {string.Join(", ", duplicateSkus.Take(5))}");
                 }
 
                 if (missingNameSkus.Count > 0)
                 {
-                    detailsBuilder.AppendLine($"Nev nelkuli uj SKU-k: {string.Join(", ", missingNameSkus.Take(5))}");
+                    detailsBuilder.AppendLine($"Név nélküli új SKU-k: {string.Join(", ", missingNameSkus.Take(5))}");
                 }
 
                 if (invalidPriceRows.Count > 0)
                 {
-                    detailsBuilder.AppendLine($"Hibas Ar mezok: {string.Join(", ", invalidPriceRows.Take(5))}");
+                    detailsBuilder.AppendLine($"Hibás Ár mezők: {string.Join(", ", invalidPriceRows.Take(5))}");
                 }
 
                 if (invalidStockRows.Count > 0)
                 {
-                    detailsBuilder.AppendLine($"Hibas Keszlet mezok: {string.Join(", ", invalidStockRows.Take(5))}");
+                    detailsBuilder.AppendLine($"Hibás Készlet mezők: {string.Join(", ", invalidStockRows.Take(5))}");
                 }
 
                 if (unresolvedProductTypeRows.Count > 0)
                 {
-                    detailsBuilder.AppendLine($"Nem feloldhato TermekTipus sorok: {string.Join(", ", unresolvedProductTypeRows.Take(5))}");
+                    detailsBuilder.AppendLine($"Nem feloldható TermékTípus sorok: {string.Join(", ", unresolvedProductTypeRows.Take(5))}");
                 }
 
             }
@@ -2692,12 +2656,12 @@ namespace WinFormsApp1
 
             if (includesCategories && categoryValidation.RowCount > 0)
             {
-                statusParts.Add($"{categoryValidation.RowCount} kategoriakapcsolat");
+                statusParts.Add($"{categoryValidation.RowCount} kategóriakapcsolat");
             }
 
             if (includesImages && imageValidation.RowCount > 0)
             {
-                statusParts.Add($"{imageValidation.RowCount} kepsor");
+                statusParts.Add($"{imageValidation.RowCount} képsor");
             }
 
             if (includesProperties && propertyValidation.RowCount > 0)
@@ -2798,20 +2762,20 @@ namespace WinFormsApp1
             }
 
             StringBuilder detailsBuilder = new();
-            detailsBuilder.AppendLine($"Kategoria munkalap: {categoryTable.Name}");
-            detailsBuilder.AppendLine($"Kategoriarendeles sorok: {rowCount}");
-            detailsBuilder.AppendLine($"Ismeretlen KategoriaSlug ertekek: {unknownCategorySlugs.Count}");
-            detailsBuilder.AppendLine($"Nem feloldhato kategoriak SKU alapjan: {unknownCategorySkuCount}");
-            detailsBuilder.AppendLine($"Hianyos kategoriarow-k: {incompleteCategoryRowCount}");
+            detailsBuilder.AppendLine($"Kategória munkalap: {categoryTable.Name}");
+            detailsBuilder.AppendLine($"Kategóriarendelés sorok: {rowCount}");
+            detailsBuilder.AppendLine($"Ismeretlen KategoriaSlug értékek: {unknownCategorySlugs.Count}");
+            detailsBuilder.AppendLine($"Nem feloldható kategóriák SKU alapján: {unknownCategorySkuCount}");
+            detailsBuilder.AppendLine($"Hiányos kategóriasorok: {incompleteCategoryRowCount}");
 
             if (unknownCategorySlugs.Count > 0)
             {
-                detailsBuilder.AppendLine($"Ismeretlen kategoriak: {string.Join(", ", unknownCategorySlugs.Take(5))}");
+                detailsBuilder.AppendLine($"Ismeretlen kategóriák: {string.Join(", ", unknownCategorySlugs.Take(5))}");
             }
 
             if (unknownCategorySkus.Count > 0)
             {
-                detailsBuilder.AppendLine($"Nem feloldhato kategoriarow-k: {string.Join(", ", unknownCategorySkus.Take(5))}");
+                detailsBuilder.AppendLine($"Nem feloldható kategóriasorok: {string.Join(", ", unknownCategorySkus.Take(5))}");
             }
 
             bool canProceed = unknownCategorySlugs.Count == 0 &&
@@ -2899,27 +2863,27 @@ namespace WinFormsApp1
             int uploadableAdditionalImageCount = uploadableImageRowCountsBySku.Values.Sum(static count => Math.Max(0, count - 1));
             int multiImageSkuCount = uploadableImageRowCountsBySku.Values.Count(static count => count > 1);
             StringBuilder detailsBuilder = new();
-            detailsBuilder.AppendLine($"Kepek munkalap: {imageTable.Name}");
-            detailsBuilder.AppendLine($"Kepsorok: {rowCount}");
-            detailsBuilder.AppendLine($"Hianyzo vagy nem feloldhato kepfajlok: {missingFileCount}");
-            detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
-            detailsBuilder.AppendLine($"Hianyos kepsorok: {incompleteRowCount}");
-            detailsBuilder.AppendLine($"Tobb kepet kapo SKU-k: {multiImageSkuCount}");
-            detailsBuilder.AppendLine($"Feltoltheto kepek bontasa: {uploadableMainImageCount} fokep, {uploadableAdditionalImageCount} tovabbi kep");
+            detailsBuilder.AppendLine($"Képek munkalap: {imageTable.Name}");
+            detailsBuilder.AppendLine($"Képsorok: {rowCount}");
+            detailsBuilder.AppendLine($"Hiányzó vagy nem feloldható képfájlok: {missingFileCount}");
+            detailsBuilder.AppendLine($"Nem feloldható SKU-k: {unknownSkuCount}");
+            detailsBuilder.AppendLine($"Hiányos képsorok: {incompleteRowCount}");
+            detailsBuilder.AppendLine($"Több képet kapó SKU-k: {multiImageSkuCount}");
+            detailsBuilder.AppendLine($"Feltölthető képek bontása: {uploadableMainImageCount} főkép, {uploadableAdditionalImageCount} további kép");
 
             if (missingFileRows.Count > 0)
             {
-                detailsBuilder.AppendLine($"Pelda hianyzo kepfajlok: {string.Join(", ", missingFileRows.Take(5))}");
+                detailsBuilder.AppendLine($"Példa hiányzó képfájlok: {string.Join(", ", missingFileRows.Take(5))}");
             }
 
             if (unknownSkuRows.Count > 0)
             {
-                detailsBuilder.AppendLine($"Nem feloldhato kep SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
+                detailsBuilder.AppendLine($"Nem feloldható kép SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
             }
 
             if (rowCount > 0)
             {
-                detailsBuilder.AppendLine("SKU-nkent az elso sikeresen feloldott kep fokepkent, a tobbi tovabbi kepkent kerul feltoltesre.");
+                detailsBuilder.AppendLine("SKU-nként az első sikeresen feloldott kép főképként, a többi további képként kerül feltöltésre.");
             }
 
             bool canProceed = missingFileCount == 0 &&
@@ -2998,7 +2962,7 @@ namespace WinFormsApp1
                 if (!hasProductType)
                 {
                     invalidPropertyCount++;
-                    invalidPropertyRows.Add($"{sku} (sor {rowNumber}) -> a termekhez nincs feloldhato TermekTipus.");
+                    invalidPropertyRows.Add($"{sku} (sor {rowNumber}) -> a termékhez nincs feloldható TermékTípus.");
                     continue;
                 }
 
@@ -3021,21 +2985,21 @@ namespace WinFormsApp1
             }
 
             StringBuilder detailsBuilder = new();
-            detailsBuilder.AppendLine($"Tulajdonsag munkalap: {propertyTable.Name}");
-            detailsBuilder.AppendLine($"Tulajdonsagsorok: {rowCount}");
-            detailsBuilder.AppendLine($"Nem feloldhato SKU-k: {unknownSkuCount}");
-            detailsBuilder.AppendLine($"Hianyos tulajdonsagsorok: {incompleteRowCount}");
-            detailsBuilder.AppendLine($"Nem importalhato tulajdonsagsorok: {invalidPropertyCount}");
-            detailsBuilder.AppendLine($"Ujonnan letrehozhato Hotcakes property-k: {createablePropertyTokens.Count}");
+            detailsBuilder.AppendLine($"Tulajdonság munkalap: {propertyTable.Name}");
+            detailsBuilder.AppendLine($"Tulajdonságsorok: {rowCount}");
+            detailsBuilder.AppendLine($"Nem feloldható SKU-k: {unknownSkuCount}");
+            detailsBuilder.AppendLine($"Hiányos tulajdonságsorok: {incompleteRowCount}");
+            detailsBuilder.AppendLine($"Nem importálható tulajdonságsorok: {invalidPropertyCount}");
+            detailsBuilder.AppendLine($"Újonnan létrehozható Hotcakes property-k: {createablePropertyTokens.Count}");
 
             if (unknownSkuRows.Count > 0)
             {
-                detailsBuilder.AppendLine($"Nem feloldhato tulajdonsag SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
+                detailsBuilder.AppendLine($"Nem feloldható tulajdonság SKU-k: {string.Join(", ", unknownSkuRows.Take(5))}");
             }
 
             if (invalidPropertyRows.Count > 0)
             {
-                detailsBuilder.AppendLine($"Nem importalhato tulajdonsagsorok: {string.Join(", ", invalidPropertyRows.Take(5))}");
+                detailsBuilder.AppendLine($"Nem importálható tulajdonságsorok: {string.Join(", ", invalidPropertyRows.Take(5))}");
             }
 
             bool canProceed = unknownSkuCount == 0 &&
@@ -3076,7 +3040,7 @@ namespace WinFormsApp1
             if (includesProducts)
             {
                 builder.AppendLine($"Termeksorok: {productRowCount}");
-                builder.AppendLine($"Uj termekek: {newProductCount}");
+                builder.AppendLine($"Új termékek: {newProductCount}");
                 builder.AppendLine($"Meglevo termekek: {existingProductCount}");
             }
 
@@ -3150,7 +3114,7 @@ namespace WinFormsApp1
             for (int index = 0; index < productRows.Count; index++)
             {
                 ProductImportRow row = productRows[index];
-                SetStatusMessage($"Termek import folyamatban... ({index + 1}/{productRows.Count})");
+                SetStatusMessage($"Termék import folyamatban... ({index + 1}/{productRows.Count})");
 
                 try
                 {
@@ -3214,7 +3178,7 @@ namespace WinFormsApp1
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"A(z) {row.RowNumber}. sor termek importja nem sikerult ({row.Sku}): {ex.Message}");
+                    errors.Add($"A(z) {row.RowNumber}. sor termék importja nem sikerült ({row.Sku}): {ex.Message}");
                 }
             }
 
@@ -3235,21 +3199,21 @@ namespace WinFormsApp1
             }
 
             StringBuilder detailsBuilder = new();
-            detailsBuilder.AppendLine("Import eredmeny");
-            detailsBuilder.AppendLine($"Letrehozott termekek: {createdCount}");
-            detailsBuilder.AppendLine($"Frissitett termekek: {updatedCount}");
-            detailsBuilder.AppendLine($"Kihagyott meglevo termekek: {skippedExistingCount}");
-            detailsBuilder.AppendLine($"Beallitott termektipusok: {productTypeAppliedCount}");
-            detailsBuilder.AppendLine($"Letrehozott kategoriakapcsolatok: {categoryLinkedCount}");
-            detailsBuilder.AppendLine($"Mar letezo vagy duplikalt kategoriakapcsolatok: {categoryAlreadyLinkedCount}");
-            detailsBuilder.AppendLine($"Feltoltott kepek: {imageUploadedCount} ({mainImageUploadedCount} fokep, {additionalImageUploadedCount} tovabbi kep)");
-            detailsBuilder.AppendLine($"Beallitott tulajdonsagok: {propertyAppliedCount}");
-            detailsBuilder.AppendLine($"Import hibak: {errors.Count}");
+            detailsBuilder.AppendLine("Import eredmény");
+            detailsBuilder.AppendLine($"Létrehozott termékek: {createdCount}");
+            detailsBuilder.AppendLine($"Frissített termékek: {updatedCount}");
+            detailsBuilder.AppendLine($"Kihagyott meglévő termékek: {skippedExistingCount}");
+            detailsBuilder.AppendLine($"Beállított terméktípusok: {productTypeAppliedCount}");
+            detailsBuilder.AppendLine($"Létrehozott kategóriakapcsolatok: {categoryLinkedCount}");
+            detailsBuilder.AppendLine($"Már létező vagy duplikált kategóriakapcsolatok: {categoryAlreadyLinkedCount}");
+            detailsBuilder.AppendLine($"Feltöltött képek: {imageUploadedCount} ({mainImageUploadedCount} főkép, {additionalImageUploadedCount} további kép)");
+            detailsBuilder.AppendLine($"Beállított tulajdonságok: {propertyAppliedCount}");
+            detailsBuilder.AppendLine($"Import hibák: {errors.Count}");
 
             if (errors.Count > 0)
             {
                 detailsBuilder.AppendLine();
-                detailsBuilder.AppendLine("Elso hibak:");
+                detailsBuilder.AppendLine("Első hibák:");
 
                 foreach (string error in errors.Take(10))
                 {
@@ -3267,12 +3231,12 @@ namespace WinFormsApp1
 
             if (includesCategories)
             {
-                statusParts.Add($"{categoryLinkedCount} kategoriakapcsolat");
+                statusParts.Add($"{categoryLinkedCount} kategóriakapcsolat");
             }
 
             if (includesImages)
             {
-                statusParts.Add($"{imageUploadedCount} kep");
+                statusParts.Add($"{imageUploadedCount} kép");
             }
 
             if (includesProperties)
@@ -3348,13 +3312,13 @@ namespace WinFormsApp1
                     if (!importedProductsBySku.TryGetValue(row.Sku, out HotcakesProduct? product) &&
                         !loadedProductsBySku.TryGetValue(row.Sku, out product))
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kategoriarow nem talal termeket ehhez az SKU-hoz: {row.Sku}.");
+                        errors.Add($"A(z) {row.RowNumber}. kategóriasor nem talál terméket ehhez az SKU-hoz: {row.Sku}.");
                         continue;
                     }
 
                     if (!categoriesBySlug.TryGetValue(normalizedCategorySlug, out HotcakesCategorySnapshot? category))
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kategoriarow ismeretlen KategoriaSlug erteket tartalmaz: {row.CategorySlug}.");
+                        errors.Add($"A(z) {row.RowNumber}. kategóriasor ismeretlen KategoriaSlug értéket tartalmaz: {row.CategorySlug}.");
                         continue;
                     }
 
@@ -3388,7 +3352,7 @@ namespace WinFormsApp1
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"A(z) {row.RowNumber}. kategoriarow importja nem sikerult ({row.Sku} / {row.CategorySlug}): {ex.Message}");
+                    errors.Add($"A(z) {row.RowNumber}. kategóriasor importja nem sikerült ({row.Sku} / {row.CategorySlug}): {ex.Message}");
                 }
             }
 
@@ -3424,19 +3388,19 @@ namespace WinFormsApp1
 
                     if (product is null)
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kepsor nem talal termeket ehhez az SKU-hoz: {row.Sku}.");
+                        errors.Add($"A(z) {row.RowNumber}. képsor nem talál terméket ehhez az SKU-hoz: {row.Sku}.");
                         continue;
                     }
 
                     if (!TryResolveImageFilePath(workbookFilePath, row.ImagePath, row.ImageName, out string? resolvedPath))
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kepsor kepfajlja nem talalhato: {BuildImageReference(row.ImagePath, row.ImageName)}.");
+                        errors.Add($"A(z) {row.RowNumber}. képsor képfájlja nem található: {BuildImageReference(row.ImagePath, row.ImageName)}.");
                         continue;
                     }
 
                     if (string.IsNullOrWhiteSpace(resolvedPath))
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kepsor kepfajlja ures feloldasi utvonalat adott vissza ({row.Sku}).");
+                        errors.Add($"A(z) {row.RowNumber}. képsor képfájlja üres feloldási útvonalat adott vissza ({row.Sku}).");
                         continue;
                     }
 
@@ -3461,7 +3425,7 @@ namespace WinFormsApp1
                     }
 
                     bool uploadAsMainImage = !skusWithMainImage.Contains(row.Sku);
-                    string uploadTypeLabel = uploadAsMainImage ? "fokep" : "tovabbi kep";
+                    string uploadTypeLabel = uploadAsMainImage ? "főkép" : "további kép";
                     SetStatusMessage($"Kepek feltoltese... ({index + 1}/{imageRows.Count}) - {uploadTypeLabel}");
                     string alternateText = string.IsNullOrWhiteSpace(product.ProductName)
                         ? uploadFileName
@@ -3472,7 +3436,7 @@ namespace WinFormsApp1
 
                     if (!uploaded)
                     {
-                        errors.Add($"A(z) {row.RowNumber}. kepsor {uploadTypeLabel} feltoltese sikertelen volt ({row.Sku}): {uploadFileName}.");
+                        errors.Add($"A(z) {row.RowNumber}. képsor {uploadTypeLabel} feltöltése sikertelen volt ({row.Sku}): {uploadFileName}.");
                         continue;
                     }
 
@@ -3499,13 +3463,13 @@ namespace WinFormsApp1
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"A(z) {row.RowNumber}. kepsor importja nem sikerult ({row.Sku}): {ex.Message}");
+                    errors.Add($"A(z) {row.RowNumber}. képsor importja nem sikerült ({row.Sku}): {ex.Message}");
                 }
             }
 
             if (skippedDuplicateCount > 0)
             {
-                SetStatusMessage($"Kepek feltoltese kesz. {skippedDuplicateCount} mar letezo kep kihagyva.");
+                SetStatusMessage($"Képek feltöltése kész. {skippedDuplicateCount} már létező kép kihagyva.");
             }
 
             return (uploadedCount, mainImageCount, additionalImageCount);
@@ -3655,7 +3619,7 @@ namespace WinFormsApp1
                             if (!linked)
                             {
                                 throw new InvalidOperationException(
-                                    $"A(z) '{productProperty.DisplayName}' tulajdonsag nem rendelheto a termek termektipusahoz.");
+                                    $"A(z) '{productProperty.DisplayName}' tulajdonság nem rendelhető a termék terméktípusához.");
                             }
 
                             assignedPropertyIds.Add(productProperty.Id);
@@ -4000,7 +3964,7 @@ namespace WinFormsApp1
 
                 if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(categorySlug))
                 {
-                    throw new InvalidOperationException($"A(z) {rowNumber}. kategoriarow csak reszben van kitoltve.");
+                    throw new InvalidOperationException($"A(z) {rowNumber}. kategóriasor csak részben van kitöltve.");
                 }
 
                 rows.Add(new CategoryImportRow(rowNumber, sku, categorySlug));
@@ -4037,7 +4001,7 @@ namespace WinFormsApp1
 
                 if (string.IsNullOrWhiteSpace(sku) || (string.IsNullOrWhiteSpace(imagePath) && string.IsNullOrWhiteSpace(imageName)))
                 {
-                    throw new InvalidOperationException($"A(z) {rowNumber}. kepsor csak reszben van kitoltve.");
+                    throw new InvalidOperationException($"A(z) {rowNumber}. képsor csak részben van kitöltve.");
                 }
 
                 rows.Add(new ImageImportRow(rowNumber, sku, imagePath, imageName));
@@ -4156,7 +4120,7 @@ namespace WinFormsApp1
                 return loadedWorkbookSheets[sheetComboBox.SelectedIndex];
             }
 
-            throw new InvalidOperationException("Nincs kijelolt vagy felismerheto termek munkalap.");
+            throw new InvalidOperationException("Nincs kijelölt vagy felismerhető termék munkalap.");
         }
 
         private WorksheetTable? TryBuildWorksheetTable(string sheetName)
@@ -4226,7 +4190,7 @@ namespace WinFormsApp1
             }
 
             throw new InvalidOperationException(
-                $"A '{worksheet.Name}' munkalaprol hianyzik a(z) {string.Join(" / ", aliases)} oszlop.");
+                $"A(z) '{worksheet.Name}' munkalapról hiányzik a(z) {string.Join(" / ", aliases)} oszlop.");
         }
 
         private static int GetOptionalColumnIndex(WorksheetTable worksheet, params string[] aliases)

@@ -447,12 +447,10 @@ namespace WinFormsApp1
         {
             if (!hotcakesReady)
             {
-                MessageBox.Show(
+                AppDialog.ShowWarning(
                     this,
-                    "A Hotcakes kapcsolat még nem áll készen a kép szerkesztő használatához.",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "A Hotcakes kapcsolat még nem áll készen a kép szerkesztő használatához.");
                 return;
             }
 
@@ -460,12 +458,10 @@ namespace WinFormsApp1
 
             if (string.IsNullOrWhiteSpace(skuFilter))
             {
-                MessageBox.Show(
+                AppDialog.ShowInfo(
                     this,
-                    "Adj meg egy SKU-t vagy részletet a szűréshez.",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Adj meg egy SKU-t vagy részletet a szűréshez.");
                 return;
             }
 
@@ -498,12 +494,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A termékek szűrése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A termékek szűrése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A kép szerkesztő szűrése nem sikerült.", true);
             }
             finally
@@ -573,12 +567,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A kiválasztott termék betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A kiválasztott termék betöltése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A kiválasztott termék betöltése nem sikerült.", true);
             }
             finally
@@ -869,12 +861,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A főkép beállítása nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A főkép beállítása nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A főkép beállítása nem sikerült.", true);
             }
             finally
@@ -933,12 +923,10 @@ namespace WinFormsApp1
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A kép törlése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A kép törlése nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A kép törlése nem sikerült.", true);
             }
             finally
@@ -1147,21 +1135,21 @@ namespace WinFormsApp1
 
                 SetStatusMessage($"Kép szerkesztő: feltöltés kész. {uploadedMainCount + uploadedAdditionalCount} kép feldolgozva.");
 
-                MessageBox.Show(
-                    this,
-                    resultBuilder.ToString(),
-                    "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    failedFiles.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                if (failedFiles.Count == 0)
+                {
+                    AppDialog.ShowInfo(this, "Kép szerkesztő", resultBuilder.ToString());
+                }
+                else
+                {
+                    AppDialog.ShowWarning(this, "Kép szerkesztő", resultBuilder.ToString());
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                AppDialog.ShowError(
                     this,
-                    $"A képfeltöltés nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}",
                     "Kép szerkesztő",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    $"A képfeltöltés nem sikerült.{Environment.NewLine}{Environment.NewLine}{ex.Message}");
                 SetStatusMessage("A képfeltöltés nem sikerült.", true);
             }
             finally
@@ -1232,59 +1220,7 @@ namespace WinFormsApp1
 
         private bool ShowLocalizedConfirmation(string message, string title)
         {
-            using Form dialog = new()
-            {
-                Text = title,
-                StartPosition = FormStartPosition.CenterParent,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                MaximizeBox = false,
-                MinimizeBox = false,
-                ShowInTaskbar = false,
-                ClientSize = new Size(430, 170),
-                BackColor = SurfaceColor,
-                ForeColor = InkColor,
-                Font = new Font("Segoe UI", 10F, FontStyle.Regular)
-            };
-
-            Label messageLabel = new()
-            {
-                AutoSize = false,
-                Left = 20,
-                Top = 18,
-                Width = dialog.ClientSize.Width - 40,
-                Height = 84,
-                Text = message,
-                ForeColor = InkColor
-            };
-
-            Button yesButton = new()
-            {
-                Text = "Igen",
-                DialogResult = DialogResult.Yes
-            };
-
-            Button noButton = new()
-            {
-                Text = "Nem",
-                DialogResult = DialogResult.No
-            };
-
-            StylePrimaryButton(yesButton);
-            StyleSecondaryButton(noButton);
-
-            const int buttonWidth = 120;
-            const int buttonHeight = 40;
-            int buttonsTop = dialog.ClientSize.Height - buttonHeight - 18;
-            noButton.SetBounds(dialog.ClientSize.Width - 20 - buttonWidth, buttonsTop, buttonWidth, buttonHeight);
-            yesButton.SetBounds(noButton.Left - 12 - buttonWidth, buttonsTop, buttonWidth, buttonHeight);
-
-            dialog.AcceptButton = yesButton;
-            dialog.CancelButton = noButton;
-            dialog.Controls.Add(messageLabel);
-            dialog.Controls.Add(yesButton);
-            dialog.Controls.Add(noButton);
-
-            return dialog.ShowDialog(this) == DialogResult.Yes;
+            return AppDialog.ShowConfirmation(this, title, message);
         }
 
         private string ResolveMainImageLocation(string productBvin, string fileName)
