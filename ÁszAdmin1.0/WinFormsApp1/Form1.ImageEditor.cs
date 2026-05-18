@@ -5,6 +5,13 @@ namespace WinFormsApp1
 {
     public partial class Form1
     {
+        private static readonly HttpClient ImageDownloadHttpClient = new()
+        {
+            Timeout = TimeSpan.FromSeconds(45)
+        };
+
+        private static readonly string[] MainImageSizeFolders = ["medium", "small", string.Empty];
+        private static readonly string[] AdditionalImageSizeFolders = ["medium", "small", string.Empty, "tiny"];
         private readonly Button imageEditorPageButton = new();
         private readonly Panel imageEditorPanel = new();
         private readonly GroupBox imageSearchGroupBox = new();
@@ -120,7 +127,7 @@ namespace WinFormsApp1
             imageActionsSummaryLabel.AutoSize = true;
             imageActionsSummaryLabel.Text = "A galériában kiválasztott képet főképpé lehet tenni, törölni lehet, illetve új képeket is fel lehet tölteni.";
 
-            imageSelectedImageLabel.AutoSize = true;
+            imageSelectedImageLabel.AutoSize = false;
             imageSelectedImageLabel.Text = "Kiválasztott kép: nincs";
 
             imageSetMainButton.Text = "Kiválasztott kép beállítása főképként";
@@ -370,8 +377,13 @@ namespace WinFormsApp1
             imageActionsSummaryLabel.Location = new Point(left, currentY);
             currentY = imageActionsSummaryLabel.Bottom + gap;
 
-            imageSelectedImageLabel.MaximumSize = new Size(contentWidth, 0);
-            imageSelectedImageLabel.Location = new Point(left, currentY);
+            Size selectedImageTextSize = TextRenderer.MeasureText(
+                imageSelectedImageLabel.Text,
+                imageSelectedImageLabel.Font,
+                new Size(contentWidth, int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.Left);
+            int selectedImageLabelHeight = Math.Max(36, Math.Min(108, selectedImageTextSize.Height + 8));
+            imageSelectedImageLabel.SetBounds(left, currentY, contentWidth, selectedImageLabelHeight);
             currentY = imageSelectedImageLabel.Bottom + gap;
 
             imageSetMainButton.SetBounds(left, currentY, contentWidth, buttonHeight);
@@ -787,6 +799,7 @@ namespace WinFormsApp1
                 imagePreviewCaptionLabel.Text = "Előnézet";
                 imagePreviewBox.ImageLocation = null;
                 imagePreviewBox.Image = null;
+                LayoutImageActionsGroup();
                 return;
             }
 
@@ -797,6 +810,7 @@ namespace WinFormsApp1
                 : $"Előnézet: {imageEditorSelectedImage.FileName}";
             imagePreviewBox.ImageLocation = null;
             imagePreviewBox.Image = null;
+            LayoutImageActionsGroup();
 
             if (!string.IsNullOrWhiteSpace(imageEditorSelectedImage.ImageLocation))
             {
@@ -846,18 +860,42 @@ namespace WinFormsApp1
 
             try
             {
+                ImageEditorImageItem selectedImage = imageEditorSelectedImage;
+                HotcakesProduct currentProduct = imageEditorCurrentProduct;
                 UseWaitCursor = true;
                 isImporting = true;
                 UpdateActionStates();
-                SetStatusMessage($"Kép szerkesztő: főkép módosítása ({imageEditorSelectedImage.FileName})...");
+                SetStatusMessage($"Kép szerkesztő: főkép módosítása ({selectedImage.FileName})...");
 
-                await PreserveCurrentMainImageAsAdditionalAsync(imageEditorCurrentProduct, imageEditorSelectedImage.FileName);
-                HotcakesProduct updatedProduct = await SaveMainImageMetadataAsync(imageEditorCurrentProduct, imageEditorSelectedImage.FileName);
+                await PreserveCurrentMainImageAsAdditionalAsync(currentProduct, selectedImage.FileName);
+
+                byte[] selectedImageContent = await LoadImageFileContentAsync(currentProduct.Bvin, selectedImage);
+                bool mainImageUploaded = await hotcakesClient.UploadProductMainImageAsync(
+                    currentProduct.Bvin,
+                    selectedImage.FileName,
+                    selectedImageContent);
+
+                if (!mainImageUploaded)
+                {
+                    throw new InvalidOperationException("A kiválasztott kép főképként történő feltöltése sikertelen volt.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(selectedImage.ProductImageBvin))
+                {
+                    bool deleted = await hotcakesClient.DeleteProductImageAsync(selectedImage.ProductImageBvin);
+
+                    if (!deleted)
+                    {
+                        throw new InvalidOperationException("A korábbi további képrekord törlése sikertelen volt.");
+                    }
+                }
+
+                HotcakesProduct updatedProduct = await SaveMainImageMetadataAsync(currentProduct, selectedImage.FileName);
                 imageEditorCurrentProduct = updatedProduct;
                 loadedProductsBySku[updatedProduct.Sku] = updatedProduct;
 
                 await LoadImageEditorImagesAsync(updatedProduct);
-                SetStatusMessage($"Kép szerkesztő: új főkép beállítva ({imageEditorSelectedImage.FileName}).");
+                SetStatusMessage($"Kép szerkesztő: új főkép beállítva ({selectedImage.FileName}).");
             }
             catch (Exception ex)
             {
@@ -978,6 +1016,28 @@ namespace WinFormsApp1
             }
         }
 
+        private async Task<byte[]> LoadImageFileContentAsync(string productBvin, ImageEditorImageItem imageItem)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+            ArgumentNullException.ThrowIfNull(imageItem);
+
+            if (!string.IsNullOrWhiteSpace(imageItem.ProductImageBvin))
+            {
+                string? additionalLocalPath = TryResolveAdditionalImageFilePath(productBvin, imageItem.ProductImageBvin, imageItem.FileName);
+
+                if (!string.IsNullOrWhiteSpace(additionalLocalPath) && File.Exists(additionalLocalPath))
+                {
+                    return await File.ReadAllBytesAsync(additionalLocalPath);
+                }
+
+                string additionalImageUrl = BuildAdditionalImageUrl(productBvin, imageItem.ProductImageBvin, imageItem.FileName, "medium");
+                using HttpClient httpClient = new();
+                return await httpClient.GetByteArrayAsync(additionalImageUrl);
+            }
+
+            return await LoadMainImageFileContentAsync(productBvin, imageItem.FileName);
+        }
+
         private async Task<byte[]> LoadMainImageFileContentAsync(string productBvin, string fileName)
         {
             string? localPath = TryResolveMainImageFilePath(productBvin, fileName);
@@ -988,8 +1048,7 @@ namespace WinFormsApp1
             }
 
             string imageUrl = BuildMainImageUrl(productBvin, fileName, "medium");
-            using HttpClient httpClient = new();
-            return await httpClient.GetByteArrayAsync(imageUrl);
+            return await ImageDownloadHttpClient.GetByteArrayAsync(imageUrl);
         }
 
         private async Task<HotcakesProduct> ClearMainImageMetadataAsync(HotcakesProduct product, string fileName)
@@ -1266,7 +1325,7 @@ namespace WinFormsApp1
                     continue;
                 }
 
-                foreach (string sizeFolder in new[] { "medium", "small", string.Empty })
+                foreach (string sizeFolder in MainImageSizeFolders)
                 {
                     string candidatePath = string.IsNullOrWhiteSpace(sizeFolder)
                         ? Path.Combine(productRoot, normalizedFileName)
@@ -1302,7 +1361,7 @@ namespace WinFormsApp1
                     continue;
                 }
 
-                foreach (string sizeFolder in new[] { "medium", "small", string.Empty, "tiny" })
+                foreach (string sizeFolder in AdditionalImageSizeFolders)
                 {
                     string candidatePath = string.IsNullOrWhiteSpace(sizeFolder)
                         ? Path.Combine(productRoot, normalizedFileName)

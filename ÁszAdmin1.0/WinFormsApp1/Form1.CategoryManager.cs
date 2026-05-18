@@ -609,6 +609,7 @@ namespace WinFormsApp1
                         }
 
                         loadedCategoryIdsByProductBvin[row.ProductBvin] = new HashSet<string>(row.CategoryIds, StringComparer.OrdinalIgnoreCase);
+                        categoryIdLoadTasksByProductBvin.Remove(row.ProductBvin);
                         row.CategoriesDisplay = FormatCategoryDisplay(row.CategoryIds);
                         changedCount++;
                     }
@@ -762,10 +763,12 @@ namespace WinFormsApp1
                 return "Nincs product type";
             }
 
-            HotcakesProductTypeSnapshot? productType = loadedProductTypes
-                .FirstOrDefault(candidate => string.Equals(candidate.Bvin, productTypeId, StringComparison.OrdinalIgnoreCase));
+            string normalizedProductTypeId = NormalizeToken(productTypeId);
 
-            return productType?.ProductTypeName ?? productTypeId;
+            return !string.IsNullOrWhiteSpace(normalizedProductTypeId) &&
+                   loadedProductTypesByBvinToken.TryGetValue(normalizedProductTypeId, out HotcakesProductTypeSnapshot? productType)
+                ? productType.ProductTypeName
+                : productTypeId;
         }
 
         private string FormatCategoryDisplay(IEnumerable<string> categoryIds)

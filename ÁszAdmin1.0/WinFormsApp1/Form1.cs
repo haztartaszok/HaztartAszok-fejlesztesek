@@ -40,6 +40,8 @@ namespace WinFormsApp1
         private readonly HashSet<string> ambiguousProductPropertyNameTokens = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<string>> loadedCategoryIdsByProductBvin = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<HotcakesProductInventory>> loadedInventoriesByProductBvin = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Task<IReadOnlySet<string>>> categoryIdLoadTasksByProductBvin = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Task<IReadOnlyList<HotcakesProductInventory>>> inventoryLoadTasksByProductBvin = new(StringComparer.OrdinalIgnoreCase);
         private readonly HotcakesApiClient hotcakesClient;
         private readonly ImportHistoryStore importHistoryStore = new();
         private readonly Panel navigationPanel = new();
@@ -55,6 +57,7 @@ namespace WinFormsApp1
         private bool isInitializingHotcakes;
         private bool isLoadingHotcakesProducts;
         private bool isImporting;
+        private Task? productsLoadTask;
         private FormPage currentPage = FormPage.Import;
         private ImportValidationResult? lastValidationResult;
 
@@ -615,14 +618,8 @@ namespace WinFormsApp1
                         StringComparer.CurrentCultureIgnoreCase));
                 RebuildProductPropertyLookups();
 
-                PopulateCategorySelectors();
                 hotcakesReady = true;
-
-                if (currentPage == FormPage.BulkOperations)
-                {
-                    _ = RefreshPriceAffectedProductsAsync();
-                    _ = RefreshStatusAffectedProductsAsync();
-                }
+                PopulateCategorySelectors();
 
                 SetStatusMessage($"{loadedCategories.Count} Hotcakes kategória, {loadedProductTypes.Count} terméktípus, {loadedProductProperties.Count} terméktulajdonság betöltve.");
             }
@@ -1494,19 +1491,45 @@ namespace WinFormsApp1
 
         private async Task<IReadOnlySet<string>> GetAssignedCategoryIdsForProductAsync(string productBvin)
         {
-            if (loadedCategoryIdsByProductBvin.TryGetValue(productBvin, out HashSet<string>? cachedCategoryIds))
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+
+            string normalizedProductBvin = productBvin.Trim();
+
+            if (loadedCategoryIdsByProductBvin.TryGetValue(normalizedProductBvin, out HashSet<string>? cachedCategoryIds))
             {
                 return cachedCategoryIds;
             }
 
+            if (categoryIdLoadTasksByProductBvin.TryGetValue(normalizedProductBvin, out Task<IReadOnlySet<string>>? existingLoadTask))
+            {
+                return await existingLoadTask;
+            }
+
+            Task<IReadOnlySet<string>> loadTask = LoadAssignedCategoryIdsForProductAsync(normalizedProductBvin);
+            categoryIdLoadTasksByProductBvin[normalizedProductBvin] = loadTask;
+
+            try
+            {
+                IReadOnlySet<string> resolvedCategoryIds = await loadTask;
+                loadedCategoryIdsByProductBvin[normalizedProductBvin] = resolvedCategoryIds is HashSet<string> categorySet
+                    ? categorySet
+                    : resolvedCategoryIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                return loadedCategoryIdsByProductBvin[normalizedProductBvin];
+            }
+            finally
+            {
+                categoryIdLoadTasksByProductBvin.Remove(normalizedProductBvin);
+            }
+        }
+
+        private async Task<IReadOnlySet<string>> LoadAssignedCategoryIdsForProductAsync(string productBvin)
+        {
             IReadOnlyList<HotcakesCategorySnapshot> assignedCategories = await hotcakesClient.GetCategoriesForProductAsync(productBvin);
-            HashSet<string> resolvedCategoryIds = assignedCategories
+            return assignedCategories
                 .Select(category => category.Bvin)
                 .Where(bvin => !string.IsNullOrWhiteSpace(bvin))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            loadedCategoryIdsByProductBvin[productBvin] = resolvedCategoryIds;
-            return resolvedCategoryIds;
         }
 
         private string? GetSelectedPriceCategoryId()
@@ -1821,15 +1844,39 @@ namespace WinFormsApp1
 
         private async Task<IReadOnlyList<HotcakesProductInventory>> GetProductInventoriesForBulkAsync(string productBvin)
         {
-            if (loadedInventoriesByProductBvin.TryGetValue(productBvin, out List<HotcakesProductInventory>? cachedInventories))
+            ArgumentException.ThrowIfNullOrWhiteSpace(productBvin);
+
+            string normalizedProductBvin = productBvin.Trim();
+
+            if (loadedInventoriesByProductBvin.TryGetValue(normalizedProductBvin, out List<HotcakesProductInventory>? cachedInventories))
             {
                 return cachedInventories;
             }
 
-            IReadOnlyList<HotcakesProductInventory> inventories = await hotcakesClient.GetProductInventoriesAsync(productBvin);
-            List<HotcakesProductInventory> resolvedInventories = inventories.ToList();
-            loadedInventoriesByProductBvin[productBvin] = resolvedInventories;
-            return resolvedInventories;
+            if (inventoryLoadTasksByProductBvin.TryGetValue(normalizedProductBvin, out Task<IReadOnlyList<HotcakesProductInventory>>? existingLoadTask))
+            {
+                return await existingLoadTask;
+            }
+
+            Task<IReadOnlyList<HotcakesProductInventory>> loadTask = LoadProductInventoriesForBulkAsync(normalizedProductBvin);
+            inventoryLoadTasksByProductBvin[normalizedProductBvin] = loadTask;
+
+            try
+            {
+                IReadOnlyList<HotcakesProductInventory> inventories = await loadTask;
+                List<HotcakesProductInventory> resolvedInventories = inventories.ToList();
+                loadedInventoriesByProductBvin[normalizedProductBvin] = resolvedInventories;
+                return resolvedInventories;
+            }
+            finally
+            {
+                inventoryLoadTasksByProductBvin.Remove(normalizedProductBvin);
+            }
+        }
+
+        private async Task<IReadOnlyList<HotcakesProductInventory>> LoadProductInventoriesForBulkAsync(string productBvin)
+        {
+            return await hotcakesClient.GetProductInventoriesAsync(productBvin);
         }
 
         private string? GetSelectedStatusCategoryId()
@@ -2372,6 +2419,26 @@ namespace WinFormsApp1
                 return;
             }
 
+            if (productsLoadTask is not null)
+            {
+                await productsLoadTask;
+                return;
+            }
+
+            productsLoadTask = LoadProductsAsync();
+
+            try
+            {
+                await productsLoadTask;
+            }
+            finally
+            {
+                productsLoadTask = null;
+            }
+        }
+
+        private async Task LoadProductsAsync()
+        {
             isLoadingHotcakesProducts = true;
             UpdateActionStates();
             SetStatusMessage("Hotcakes termekek betoltese...");
@@ -2384,6 +2451,8 @@ namespace WinFormsApp1
                 loadedProductsBySku.Clear();
                 loadedCategoryIdsByProductBvin.Clear();
                 loadedInventoriesByProductBvin.Clear();
+                categoryIdLoadTasksByProductBvin.Clear();
+                inventoryLoadTasksByProductBvin.Clear();
 
                 foreach (HotcakesProduct product in products)
                 {
@@ -3034,29 +3103,29 @@ namespace WinFormsApp1
             int propertyRowCount)
         {
             StringBuilder builder = new();
-            builder.AppendLine("Valoban elinditod az importot?");
+            builder.AppendLine("Valóban elindítod az importot?");
             builder.AppendLine();
 
             if (includesProducts)
             {
-                builder.AppendLine($"Termeksorok: {productRowCount}");
+                builder.AppendLine($"Terméksorok: {productRowCount}");
                 builder.AppendLine($"Új termékek: {newProductCount}");
-                builder.AppendLine($"Meglevo termekek: {existingProductCount}");
+                builder.AppendLine($"Meglévő termékek: {existingProductCount}");
             }
 
             if (includesCategories)
             {
-                builder.AppendLine($"Kategoriakapcsolatok: {categoryRowCount}");
+                builder.AppendLine($"Kategóriakapcsolatok: {categoryRowCount}");
             }
 
             if (includesImages)
             {
-                builder.AppendLine($"Kepsorok: {imageRowCount}");
+                builder.AppendLine($"Képsorok: {imageRowCount}");
             }
 
             if (includesProperties)
             {
-                builder.AppendLine($"Tulajdonsagsorok: {propertyRowCount}");
+                builder.AppendLine($"Tulajdonságsorok: {propertyRowCount}");
             }
 
             return builder.ToString().TrimEnd();
@@ -3332,6 +3401,7 @@ namespace WinFormsApp1
 
                         assignedCategoryIdsByProduct[product.Bvin] = assignedCategoryIds;
                         loadedCategoryIdsByProductBvin[product.Bvin] = assignedCategoryIds;
+                        categoryIdLoadTasksByProductBvin.Remove(product.Bvin);
                     }
 
                     if (assignedCategoryIds.Contains(category.Bvin))
@@ -3348,6 +3418,7 @@ namespace WinFormsApp1
 
                     assignedCategoryIds.Add(category.Bvin);
                     loadedCategoryIdsByProductBvin[product.Bvin] = assignedCategoryIds;
+                    categoryIdLoadTasksByProductBvin.Remove(product.Bvin);
                     linkedCount++;
                 }
                 catch (Exception ex)
@@ -3761,9 +3832,7 @@ namespace WinFormsApp1
 
             foreach (string candidate in candidates.Where(candidate => !string.IsNullOrWhiteSpace(candidate)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                string normalizedCandidate = Path.IsPathRooted(candidate)
-                    ? Path.GetFullPath(candidate)
-                    : Path.GetFullPath(candidate);
+                string normalizedCandidate = Path.GetFullPath(candidate);
 
                 if (File.Exists(normalizedCandidate))
                 {
@@ -3879,6 +3948,7 @@ namespace WinFormsApp1
 
             await hotcakesClient.UpsertProductInventoryAsync(inventory);
             loadedInventoriesByProductBvin.Remove(product.Bvin);
+            inventoryLoadTasksByProductBvin.Remove(product.Bvin);
         }
 
         private static List<ProductImportRow> ParseProductImportRows(WorksheetTable productTable)
@@ -4263,21 +4333,30 @@ namespace WinFormsApp1
             bool hasHeaderRow = worksheet.Rows[0].Any(cell => !string.IsNullOrWhiteSpace(cell));
             string[] headerRow = hasHeaderRow ? worksheet.Rows[0] : CreateDefaultHeaders(columnCount);
 
-            for (int i = 0; i < columnCount; i++)
-            {
-                string headerText = i < headerRow.Length && !string.IsNullOrWhiteSpace(headerRow[i])
-                    ? headerRow[i]
-                    : $"Oszlop {i + 1}";
+            previewDataGridView.SuspendLayout();
 
-                previewDataGridView.Columns.Add($"previewColumn{i}", headerText);
+            try
+            {
+                for (int i = 0; i < columnCount; i++)
+                {
+                    string headerText = i < headerRow.Length && !string.IsNullOrWhiteSpace(headerRow[i])
+                        ? headerRow[i]
+                        : $"Oszlop {i + 1}";
+
+                    previewDataGridView.Columns.Add($"previewColumn{i}", headerText);
+                }
+
+                int startRowIndex = hasHeaderRow ? 1 : 0;
+
+                for (int rowIndex = startRowIndex; rowIndex < worksheet.Rows.Count; rowIndex++)
+                {
+                    string[] row = NormalizeRowLength(worksheet.Rows[rowIndex], columnCount);
+                    previewDataGridView.Rows.Add(row);
+                }
             }
-
-            int startRowIndex = hasHeaderRow ? 1 : 0;
-
-            for (int rowIndex = startRowIndex; rowIndex < worksheet.Rows.Count; rowIndex++)
+            finally
             {
-                string[] row = NormalizeRowLength(worksheet.Rows[rowIndex], columnCount);
-                previewDataGridView.Rows.Add(row.Cast<object>().ToArray());
+                previewDataGridView.ResumeLayout();
             }
         }
 
@@ -4419,11 +4498,21 @@ namespace WinFormsApp1
                 return [];
             }
 
-            List<string[]> rows = rowMaps
-                .Select(map => Enumerable.Range(1, maxColumnIndex)
-                    .Select(columnIndex => map.TryGetValue(columnIndex, out string? value) ? value : string.Empty)
-                    .ToArray())
-                .ToList();
+            List<string[]> rows = new(rowMaps.Count);
+
+            foreach (Dictionary<int, string> rowMap in rowMaps)
+            {
+                string[] rowValues = new string[maxColumnIndex];
+
+                for (int columnIndex = 0; columnIndex < rowValues.Length; columnIndex++)
+                {
+                    rowValues[columnIndex] = rowMap.TryGetValue(columnIndex + 1, out string? value)
+                        ? value
+                        : string.Empty;
+                }
+
+                rows.Add(rowValues);
+            }
 
             while (rows.Count > 0 && rows[^1].All(string.IsNullOrWhiteSpace))
             {
