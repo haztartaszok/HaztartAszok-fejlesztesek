@@ -1,13 +1,9 @@
-ÁszAdmin2.0 - Rövid használati útmutató
-=======================================
-
-Ez az útmutató azoknak készült, akik a webshop termékeit, kategóriáit és képeit
-szeretnék kezelni az ÁszAdmin2.0 alkalmazással.
-
+ÁszAdmin 1.0 - Rövid használati útmutató
+========================================
 
 1. Mire való az alkalmazás?
 ---------------------------
-Az ÁszAdmin2.0 segítségével az alábbi feladatokat lehet elvégezni:
+Az ÁszAdmin segítségével az alábbi feladatokat lehet elvégezni:
 
 - termékek importálása Excelből
 - kategóriák hozzárendelése termékekhez
@@ -226,3 +222,4 @@ Ha sok adatot akarsz egyszerre frissíteni Excelből:
 - tallózd be az Excel fájlt
 - ellenőrizd
 - indítsd az importot
+

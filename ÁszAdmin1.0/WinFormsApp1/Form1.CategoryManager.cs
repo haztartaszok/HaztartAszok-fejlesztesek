@@ -65,7 +65,7 @@ namespace WinFormsApp1
             categorySelectAllButton.Text = "Összes kijelölése";
             categorySelectAllButton.Click += CategorySelectAllButton_Click;
 
-            categoryClearSelectionButton.Text = "Kijelölés törlése";
+            categoryClearSelectionButton.Text = "Jelölés megszüntetése";
             categoryClearSelectionButton.Click += CategoryClearSelectionButton_Click;
 
             categoryManagerGrid.AllowUserToAddRows = false;
@@ -129,6 +129,7 @@ namespace WinFormsApp1
             categoryBulkCategoryLabel.Text = "Szerkesztendő kategória";
 
             categoryBulkCategoryComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            categoryBulkCategoryComboBox.SelectedIndexChanged += (_, _) => UpdateActionStates();
 
             categoryAddSelectedButton.Text = "Hozzáadás a kijelöltekhez";
             categoryAddSelectedButton.Click += async (_, _) => await ApplyCategoryToSelectedProductsAsync(addCategory: true);
@@ -320,7 +321,7 @@ namespace WinFormsApp1
             const int top = 36;
             const int right = 24;
             const int buttonHeight = 38;
-            const int buttonWidth = 150;
+            const int buttonWidth = 170;
 
             int contentWidth = Math.Max(220, categoryResultsGroupBox.ClientSize.Width - left - right);
 
@@ -547,14 +548,11 @@ namespace WinFormsApp1
             }
 
             string actionLabel = addCategory ? "hozzáadás" : "eltávolítás";
-            DialogResult confirmation = MessageBox.Show(
-                this,
+            bool confirmed = ShowLocalizedConfirmation(
                 $"Valóban lefuttatod a kategória {actionLabel} műveletet {selectedRows.Count} kijelölt terméken?{Environment.NewLine}{Environment.NewLine}Kategória: {selectedCategory.DisplayText}",
-                "Kategória kezelő",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
+                "Kategória kezelő");
 
-            if (confirmation != DialogResult.Yes)
+            if (!confirmed)
             {
                 return;
             }
