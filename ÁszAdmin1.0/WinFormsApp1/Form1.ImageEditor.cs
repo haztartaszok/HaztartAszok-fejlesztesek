@@ -875,7 +875,9 @@ namespace WinFormsApp1
                 UpdateActionStates();
                 SetStatusMessage($"Kép szerkesztő: főkép módosítása ({selectedImage.FileName})...");
 
-                byte[] selectedImageContent = await LoadImageFileContentAsync(currentProduct.Bvin, selectedImage);
+                byte[] selectedImageContent = NormalizeImageContentForHotcakesUpload(
+                    await LoadImageFileContentAsync(currentProduct.Bvin, selectedImage),
+                    selectedImage.FileName);
 
                 if (!string.IsNullOrWhiteSpace(selectedImage.ProductImageBvin))
                 {
@@ -1018,7 +1020,9 @@ namespace WinFormsApp1
                 return;
             }
 
-            byte[] fileContent = await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName);
+            byte[] fileContent = NormalizeImageContentForHotcakesUpload(
+                await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName),
+                normalizedCurrentMainFileName);
             string alternateText = ResolveMainAlternateText(product, normalizedCurrentMainFileName);
             bool uploaded = await hotcakesClient.UploadProductAdditionalImageAsync(
                 product.Bvin,
@@ -1053,7 +1057,9 @@ namespace WinFormsApp1
                 return;
             }
 
-            byte[] currentMainContent = await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName);
+            byte[] currentMainContent = NormalizeImageContentForHotcakesUpload(
+                await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName),
+                normalizedCurrentMainFileName);
             string alternateText = ResolveMainAlternateText(product, normalizedCurrentMainFileName);
             HotcakesProductImage updatedImage = await hotcakesClient.UpdateProductImageAsync(
                 new HotcakesProductImage
@@ -1172,6 +1178,33 @@ namespace WinFormsApp1
 
             using Bitmap decodedBitmap = new(pngStream);
             return new Bitmap(decodedBitmap);
+        }
+
+        private static byte[] NormalizeImageContentForHotcakesUpload(byte[] imageBytes, string fileName)
+        {
+            if (!IsWebPContent(imageBytes) ||
+                !string.Equals(Path.GetExtension(fileName), ".png", StringComparison.OrdinalIgnoreCase))
+            {
+                return imageBytes;
+            }
+
+            using var image = ImageSharpImage.Load<Rgba32>(imageBytes);
+            using MemoryStream pngStream = new();
+            image.Save(pngStream, new PngEncoder());
+            return pngStream.ToArray();
+        }
+
+        private static bool IsWebPContent(byte[] imageBytes)
+        {
+            return imageBytes.Length >= 12 &&
+                   imageBytes[0] == (byte)'R' &&
+                   imageBytes[1] == (byte)'I' &&
+                   imageBytes[2] == (byte)'F' &&
+                   imageBytes[3] == (byte)'F' &&
+                   imageBytes[8] == (byte)'W' &&
+                   imageBytes[9] == (byte)'E' &&
+                   imageBytes[10] == (byte)'B' &&
+                   imageBytes[11] == (byte)'P';
         }
 
         private async Task<byte[]> LoadMainImageFileContentAsync(string productBvin, string fileName)
