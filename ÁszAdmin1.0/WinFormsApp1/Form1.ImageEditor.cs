@@ -125,7 +125,7 @@ namespace WinFormsApp1
             imagePreviewCaptionLabel.Text = "Előnézet";
 
             imageActionsSummaryLabel.AutoSize = true;
-            imageActionsSummaryLabel.Text = "A galériában kiválasztott képet főképpé lehet tenni, törölni lehet, illetve új képeket is fel lehet tölteni.";
+            imageActionsSummaryLabel.Text = "A galériában kiválasztott képet főképpé lehet tenni, a további képeket törölni lehet, illetve új képeket is fel lehet tölteni. A főkép törlése itt nem engedélyezett.";
 
             imageSelectedImageLabel.AutoSize = false;
             imageSelectedImageLabel.Text = "Kiválasztott kép: nincs";
@@ -438,7 +438,12 @@ namespace WinFormsApp1
             imageSearchClearButton.Enabled = !isBusy;
             imageLoadSelectedProductButton.Enabled = hotcakesReady && !isBusy && hasSelectedSearchRow;
             imageSetMainButton.Enabled = hotcakesReady && !isBusy && hasProduct && hasSelectedImage;
-            imageDeleteButton.Enabled = hotcakesReady && !isBusy && hasProduct && hasSelectedImage;
+            imageDeleteButton.Enabled = hotcakesReady &&
+                !isBusy &&
+                hasProduct &&
+                hasSelectedImage &&
+                imageEditorSelectedImage is not null &&
+                !imageEditorSelectedImage.IsCurrentMain;
             imageUploadButton.Enabled = hotcakesReady && !isBusy && hasProduct;
             imageRefreshButton.Enabled = hotcakesReady && !isBusy && hasProduct;
         }
@@ -867,9 +872,17 @@ namespace WinFormsApp1
                 UpdateActionStates();
                 SetStatusMessage($"Kép szerkesztő: főkép módosítása ({selectedImage.FileName})...");
 
-                await PreserveCurrentMainImageAsAdditionalAsync(currentProduct, selectedImage.FileName);
-
                 byte[] selectedImageContent = await LoadImageFileContentAsync(currentProduct.Bvin, selectedImage);
+
+                if (!string.IsNullOrWhiteSpace(selectedImage.ProductImageBvin))
+                {
+                    await ReplaceSelectedAdditionalImageWithCurrentMainAsync(currentProduct, selectedImage);
+                }
+                else
+                {
+                    await PreserveCurrentMainImageAsAdditionalAsync(currentProduct, selectedImage.FileName);
+                }
+
                 bool mainImageUploaded = await hotcakesClient.UploadProductMainImageAsync(
                     currentProduct.Bvin,
                     selectedImage.FileName,
@@ -880,17 +893,8 @@ namespace WinFormsApp1
                     throw new InvalidOperationException("A kiválasztott kép főképként történő feltöltése sikertelen volt.");
                 }
 
-                if (!string.IsNullOrWhiteSpace(selectedImage.ProductImageBvin))
-                {
-                    bool deleted = await hotcakesClient.DeleteProductImageAsync(selectedImage.ProductImageBvin);
-
-                    if (!deleted)
-                    {
-                        throw new InvalidOperationException("A korábbi további képrekord törlése sikertelen volt.");
-                    }
-                }
-
                 HotcakesProduct updatedProduct = await SaveMainImageMetadataAsync(currentProduct, selectedImage.FileName);
+
                 imageEditorCurrentProduct = updatedProduct;
                 loadedProductsBySku[updatedProduct.Sku] = updatedProduct;
 
@@ -917,6 +921,16 @@ namespace WinFormsApp1
         {
             if (imageEditorCurrentProduct is null || imageEditorSelectedImage is null)
             {
+                return;
+            }
+
+            if (imageEditorSelectedImage.IsCurrentMain)
+            {
+                AppDialog.ShowWarning(
+                    this,
+                    "Kép szerkesztő",
+                    "A főkép törlése az alkalmazásban nem engedélyezett. Előbb válassz másik főképet, vagy törölj további képet.");
+                SetStatusMessage("A főkép törlése nem engedélyezett.", true);
                 return;
             }
 
@@ -1013,6 +1027,60 @@ namespace WinFormsApp1
             if (!uploaded)
             {
                 throw new InvalidOperationException("A jelenlegi főkép nem menthető át további képként.");
+            }
+        }
+
+        private async Task ReplaceSelectedAdditionalImageWithCurrentMainAsync(HotcakesProduct product, ImageEditorImageItem selectedImage)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+            ArgumentNullException.ThrowIfNull(selectedImage);
+
+            if (string.IsNullOrWhiteSpace(selectedImage.ProductImageBvin))
+            {
+                return;
+            }
+
+            string currentMainFileName = ResolveMainImageFileName(product);
+            string normalizedCurrentMainFileName = Path.GetFileName(currentMainFileName?.Trim() ?? string.Empty);
+            string normalizedSelectedFileName = Path.GetFileName(selectedImage.FileName?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(normalizedCurrentMainFileName) ||
+                string.Equals(normalizedCurrentMainFileName, normalizedSelectedFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            byte[] currentMainContent = await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName);
+            string alternateText = ResolveMainAlternateText(product, normalizedCurrentMainFileName);
+            HotcakesProductImage updatedImage = await hotcakesClient.UpdateProductImageAsync(
+                new HotcakesProductImage
+                {
+                    Bvin = selectedImage.ProductImageBvin,
+                    ProductId = product.Bvin,
+                    FileName = normalizedCurrentMainFileName,
+                    Caption = string.Empty,
+                    AlternateText = alternateText,
+                    SortOrder = selectedImage.SortOrder,
+                    StoreId = product.StoreId,
+                    LastUpdatedUtc = DateTime.UtcNow
+                });
+
+            if (string.IsNullOrWhiteSpace(updatedImage.Bvin))
+            {
+                throw new InvalidOperationException("A korábbi főkép képrekordja nem frissíthető a helycseréhez.");
+            }
+
+            bool uploaded = await hotcakesClient.UploadProductAdditionalImageAsync(
+                product.Bvin,
+                normalizedCurrentMainFileName,
+                currentMainContent,
+                alternateText,
+                product.StoreId,
+                selectedImage.ProductImageBvin);
+
+            if (!uploaded)
+            {
+                throw new InvalidOperationException("A korábbi főkép nem menthető át a kiválasztott további kép helyére.");
             }
         }
 

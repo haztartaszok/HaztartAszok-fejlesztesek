@@ -406,6 +406,20 @@ namespace WinFormsApp1
             return response.Content ?? [];
         }
 
+        public Task<HotcakesProductImage> UpdateProductImageAsync(
+            HotcakesProductImage image,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(image);
+            ArgumentException.ThrowIfNullOrWhiteSpace(image.Bvin);
+
+            return PostContentAsync(
+                $"productimages/{Uri.EscapeDataString(image.Bvin.Trim())}",
+                image,
+                static () => new HotcakesProductImage(),
+                cancellationToken);
+        }
+
         public Task<bool> DeleteProductImageAsync(
             string imageBvin,
             CancellationToken cancellationToken = default)
