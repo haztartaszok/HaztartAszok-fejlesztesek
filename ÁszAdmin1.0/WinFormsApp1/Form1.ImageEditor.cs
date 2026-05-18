@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.Text;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
+using ImageSharpImage = SixLabors.ImageSharp.Image;
 
 namespace WinFormsApp1
 {
@@ -736,7 +739,7 @@ namespace WinFormsApp1
 
             if (!string.IsNullOrWhiteSpace(imageItem.ImageLocation))
             {
-                thumbnailBox.LoadAsync(imageItem.ImageLocation);
+                _ = LoadPictureBoxImageAsync(thumbnailBox, imageItem.ImageLocation);
             }
 
             Label nameLabel = new()
@@ -819,7 +822,7 @@ namespace WinFormsApp1
 
             if (!string.IsNullOrWhiteSpace(imageEditorSelectedImage.ImageLocation))
             {
-                imagePreviewBox.LoadAsync(imageEditorSelectedImage.ImageLocation);
+                _ = LoadPictureBoxImageAsync(imagePreviewBox, imageEditorSelectedImage.ImageLocation);
             }
         }
 
@@ -1104,6 +1107,71 @@ namespace WinFormsApp1
             }
 
             return await LoadMainImageFileContentAsync(productBvin, imageItem.FileName);
+        }
+
+        private async Task LoadPictureBoxImageAsync(PictureBox pictureBox, string imageLocation)
+        {
+            if (pictureBox.IsDisposed || string.IsNullOrWhiteSpace(imageLocation))
+            {
+                return;
+            }
+
+            try
+            {
+                using Bitmap loadedImage = await DecodeImageForPictureBoxAsync(imageLocation);
+                Bitmap displayImage = new(loadedImage);
+
+                if (pictureBox.IsDisposed)
+                {
+                    displayImage.Dispose();
+                    return;
+                }
+
+                void AssignImage()
+                {
+                    if (pictureBox.IsDisposed)
+                    {
+                        displayImage.Dispose();
+                        return;
+                    }
+
+                    Image? previousImage = pictureBox.Image;
+                    pictureBox.ImageLocation = null;
+                    pictureBox.Image = displayImage;
+                    previousImage?.Dispose();
+                }
+
+                if (pictureBox.InvokeRequired)
+                {
+                    pictureBox.BeginInvoke(AssignImage);
+                }
+                else
+                {
+                    AssignImage();
+                }
+            }
+            catch
+            {
+                if (!pictureBox.IsDisposed)
+                {
+                    pictureBox.ImageLocation = imageLocation;
+                }
+            }
+        }
+
+        private static async Task<Bitmap> DecodeImageForPictureBoxAsync(string imageLocation)
+        {
+            byte[] imageBytes = File.Exists(imageLocation)
+                ? await File.ReadAllBytesAsync(imageLocation)
+                : await ImageDownloadHttpClient.GetByteArrayAsync(imageLocation);
+
+            using var image = ImageSharpImage.Load<Rgba32>(imageBytes);
+            using MemoryStream pngStream = new();
+            image.Save(pngStream, new PngEncoder());
+            pngStream.Position = 0;
+
+            using Bitmap decodedBitmap = new(pngStream);
+            return new Bitmap(decodedBitmap);
         }
 
         private async Task<byte[]> LoadMainImageFileContentAsync(string productBvin, string fileName)
@@ -1395,11 +1463,13 @@ namespace WinFormsApp1
 
                 foreach (string sizeFolder in MainImageSizeFolders)
                 {
-                    string candidatePath = string.IsNullOrWhiteSpace(sizeFolder)
-                        ? Path.Combine(productRoot, normalizedFileName)
-                        : Path.Combine(productRoot, sizeFolder, normalizedFileName);
+                    string candidateDirectory = string.IsNullOrWhiteSpace(sizeFolder)
+                        ? productRoot
+                        : Path.Combine(productRoot, sizeFolder);
 
-                    if (File.Exists(candidatePath))
+                    string? candidatePath = TryResolveImageFileInDirectory(candidateDirectory, normalizedFileName);
+
+                    if (!string.IsNullOrWhiteSpace(candidatePath))
                     {
                         return candidatePath;
                     }
@@ -1431,11 +1501,13 @@ namespace WinFormsApp1
 
                 foreach (string sizeFolder in AdditionalImageSizeFolders)
                 {
-                    string candidatePath = string.IsNullOrWhiteSpace(sizeFolder)
-                        ? Path.Combine(productRoot, normalizedFileName)
-                        : Path.Combine(productRoot, sizeFolder, normalizedFileName);
+                    string candidateDirectory = string.IsNullOrWhiteSpace(sizeFolder)
+                        ? productRoot
+                        : Path.Combine(productRoot, sizeFolder);
 
-                    if (File.Exists(candidatePath))
+                    string? candidatePath = TryResolveImageFileInDirectory(candidateDirectory, normalizedFileName);
+
+                    if (!string.IsNullOrWhiteSpace(candidatePath))
                     {
                         return candidatePath;
                     }
@@ -1443,6 +1515,35 @@ namespace WinFormsApp1
             }
 
             return null;
+        }
+
+        private static string? TryResolveImageFileInDirectory(string directoryPath, string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(directoryPath) || string.IsNullOrWhiteSpace(fileName) || !Directory.Exists(directoryPath))
+            {
+                return null;
+            }
+
+            string exactPath = Path.Combine(directoryPath, fileName);
+
+            if (File.Exists(exactPath))
+            {
+                return exactPath;
+            }
+
+            string normalizedFileName = NormalizeToken(fileName);
+
+            if (string.IsNullOrWhiteSpace(normalizedFileName))
+            {
+                return null;
+            }
+
+            return Directory.EnumerateFiles(directoryPath)
+                .FirstOrDefault(candidatePath =>
+                    string.Equals(
+                        NormalizeToken(Path.GetFileName(candidatePath)),
+                        normalizedFileName,
+                        StringComparison.Ordinal));
         }
 
         private static IEnumerable<string> EnumerateProductImageRoots()
