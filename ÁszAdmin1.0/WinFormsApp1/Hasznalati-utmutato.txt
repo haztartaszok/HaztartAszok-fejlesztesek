@@ -201,25 +201,3 @@ Ilyenkor érdemes felírni vagy lefotózni:
 - milyen hibaüzenet jelent meg
 
 
-11. Rövid összefoglalás
------------------------
-Ha egy terméket akarsz megkeresni és a képét módosítani:
-- menj a Kép szerkesztő fülre
-- szűrj SKU alapján
-- válaszd ki a terméket
-- töltsd be
-- módosítsd a képeket
-
-Ha több terméket akarsz kategóriába tenni vagy onnan kivenni:
-- menj a Kategória kezelő fülre
-- szűrj
-- jelöld ki a termékeket
-- válassz kategóriát
-- futtasd a műveletet
-
-Ha sok adatot akarsz egyszerre frissíteni Excelből:
-- menj az Importálás fülre
-- tallózd be az Excel fájlt
-- ellenőrizd
-- indítsd az importot
-

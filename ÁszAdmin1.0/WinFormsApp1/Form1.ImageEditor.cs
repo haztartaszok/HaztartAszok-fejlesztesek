@@ -859,6 +859,7 @@ namespace WinFormsApp1
                 UpdateActionStates();
                 SetStatusMessage($"Kép szerkesztő: főkép módosítása ({imageEditorSelectedImage.FileName})...");
 
+                await PreserveCurrentMainImageAsAdditionalAsync(imageEditorCurrentProduct, imageEditorSelectedImage.FileName);
                 HotcakesProduct updatedProduct = await SaveMainImageMetadataAsync(imageEditorCurrentProduct, imageEditorSelectedImage.FileName);
                 imageEditorCurrentProduct = updatedProduct;
                 loadedProductsBySku[updatedProduct.Sku] = updatedProduct;
@@ -946,6 +947,61 @@ namespace WinFormsApp1
                 UpdateActionStates();
                 UseWaitCursor = false;
             }
+        }
+
+        private async Task PreserveCurrentMainImageAsAdditionalAsync(HotcakesProduct product, string newMainFileName)
+        {
+            ArgumentNullException.ThrowIfNull(product);
+
+            string currentMainFileName = ResolveMainImageFileName(product);
+            string normalizedCurrentMainFileName = Path.GetFileName(currentMainFileName?.Trim() ?? string.Empty);
+            string normalizedNewMainFileName = Path.GetFileName(newMainFileName?.Trim() ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(normalizedCurrentMainFileName) ||
+                string.Equals(normalizedCurrentMainFileName, normalizedNewMainFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            IReadOnlyList<HotcakesProductImage> existingImages = await hotcakesClient.GetProductImagesForProductAsync(product.Bvin);
+            bool alreadyExistsAsAdditional = existingImages.Any(image =>
+                string.Equals(
+                    Path.GetFileName(image.FileName?.Trim() ?? string.Empty),
+                    normalizedCurrentMainFileName,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (alreadyExistsAsAdditional)
+            {
+                return;
+            }
+
+            byte[] fileContent = await LoadMainImageFileContentAsync(product.Bvin, normalizedCurrentMainFileName);
+            string alternateText = ResolveMainAlternateText(product, normalizedCurrentMainFileName);
+            bool uploaded = await hotcakesClient.UploadProductAdditionalImageAsync(
+                product.Bvin,
+                normalizedCurrentMainFileName,
+                fileContent,
+                alternateText,
+                product.StoreId);
+
+            if (!uploaded)
+            {
+                throw new InvalidOperationException("A jelenlegi főkép nem menthető át további képként.");
+            }
+        }
+
+        private async Task<byte[]> LoadMainImageFileContentAsync(string productBvin, string fileName)
+        {
+            string? localPath = TryResolveMainImageFilePath(productBvin, fileName);
+
+            if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+            {
+                return await File.ReadAllBytesAsync(localPath);
+            }
+
+            string imageUrl = BuildMainImageUrl(productBvin, fileName, "medium");
+            using HttpClient httpClient = new();
+            return await httpClient.GetByteArrayAsync(imageUrl);
         }
 
         private async Task<HotcakesProduct> ClearMainImageMetadataAsync(HotcakesProduct product, string fileName)

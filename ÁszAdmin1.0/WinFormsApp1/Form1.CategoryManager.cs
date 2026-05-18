@@ -321,13 +321,15 @@ namespace WinFormsApp1
             const int top = 36;
             const int right = 24;
             const int buttonHeight = 38;
-            const int buttonWidth = 170;
+            const int buttonGap = 10;
 
             int contentWidth = Math.Max(220, categoryResultsGroupBox.ClientSize.Width - left - right);
+            int clearSelectionButtonWidth = Math.Max(210, TextRenderer.MeasureText(categoryClearSelectionButton.Text, categoryClearSelectionButton.Font).Width + 32);
+            int selectAllButtonWidth = Math.Max(180, TextRenderer.MeasureText(categorySelectAllButton.Text, categorySelectAllButton.Font).Width + 32);
 
             categoryResultsSummaryLabel.Location = new Point(left, top + 6);
-            categoryClearSelectionButton.SetBounds(categoryResultsGroupBox.ClientSize.Width - right - buttonWidth, top, buttonWidth, buttonHeight);
-            categorySelectAllButton.SetBounds(categoryClearSelectionButton.Left - 10 - buttonWidth, top, buttonWidth, buttonHeight);
+            categoryClearSelectionButton.SetBounds(categoryResultsGroupBox.ClientSize.Width - right - clearSelectionButtonWidth, top, clearSelectionButtonWidth, buttonHeight);
+            categorySelectAllButton.SetBounds(categoryClearSelectionButton.Left - buttonGap - selectAllButtonWidth, top, selectAllButtonWidth, buttonHeight);
 
             int gridTop = categorySelectAllButton.Bottom + 14;
             categoryManagerGrid.SetBounds(left, gridTop, contentWidth, categoryResultsGroupBox.ClientSize.Height - gridTop - 18);
